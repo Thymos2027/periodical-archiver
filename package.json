@@ -1,0 +1,19 @@
+{
+  "name": "caixin-weekly-personal-archive",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal-use workflow to capture a single Caixin Weekly issue from an already logged-in browser session and build an EPUB.",
+  "main": "src/fetch_issue.js",
+  "scripts": {
+    "fetch": "node src/fetch_issue.js",
+    "build:epub": "node src/build_epub.js",
+    "archive": "node src/archive.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "cheerio": "^1.1.2",
+    "playwright": "^1.54.2"
+  }
+}

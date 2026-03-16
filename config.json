@@ -1,0 +1,99 @@
+{
+  "issueUrl": "https://weekly.caixin.com/",
+  "profileDir": "./profile",
+  "tempDir": "./tmp",
+  "outputDir": "./output",
+  "bookTitlePrefix": "财新周刊",
+  "headless": false,
+  "browserChannel": "chrome",
+  "articleLimit": 30,
+  "targetSections": [
+    "财新观察",
+    "封面报道",
+    "时事",
+    "经济",
+    "金融",
+    "民生",
+    "商业",
+    "特别报道",
+    "开卷",
+    "副刊"
+  ],
+  "issueLinkInclude": [
+    "caixin.com"
+  ],
+  "issueLinkTextAllow": [
+    "周刊",
+    "财新周刊",
+    "封面",
+    "目录",
+    "商业",
+    "金融",
+    "经济",
+    "时事",
+    "民生",
+    "专栏"
+  ],
+  "articleAllowDomains": [
+    "weekly.caixin.com",
+    "magazine.caixin.com",
+    "caixin.com"
+  ],
+  "articleUrlPatterns": [
+    "\\d{4}-\\d{2}-\\d{2}",
+    "\\d{6,}",
+    "\\.html?$"
+  ],
+  "selectors": {
+    "articleTitle": "h1",
+    "articleAuthor": ".author, .article-author, [class*='author']",
+    "articleDate": ".time, .date, .pubtime, time",
+    "articleContent": ".article-content, .content, .article, article, [class*='content']"
+  },
+  "removeSelectors": [
+    "script",
+    "style",
+    "iframe",
+    "noscript",
+    "svg",
+    ".ad",
+    ".advertisement",
+    ".share",
+    ".related",
+    ".recommend",
+    ".comment"
+  ],
+  "noProxy": true,
+  "proxyServer": "",
+  "navigationRetries": 4,
+  "navigationTimeoutMs": 90000,
+  "minBodyTextLength": 800,
+  "skipTitleKeywords": [
+    "上一期",
+    "下一期",
+    "往期回顾",
+    "周刊导播",
+    "订阅",
+    "广告",
+    "市场企划",
+    "{{周刊导播"
+  ],
+  "minAcceptBodyTextLength": 280,
+  "articleLoadPasses": 8,
+  "articlePassDelayMs": 2000,
+  "browserFallbackChannels": [
+    "msedge"
+  ],
+  "sectionDownloadOrder": [
+    "财新观察",
+    "封面报道",
+    "时事",
+    "经济",
+    "金融",
+    "商业",
+    "副刊",
+    "特别报道",
+    "民生",
+    "开卷"
+  ]
+}
