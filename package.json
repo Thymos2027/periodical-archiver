@@ -2,6 +2,7 @@
   "name": "caixin-weekly-personal-archive",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.14.0",
   "description": "Personal-use workflow to capture a single Caixin Weekly issue from an already logged-in browser session and build an EPUB.",
   "main": "src/fetch_issue.js",
   "scripts": {

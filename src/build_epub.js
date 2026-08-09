@@ -2,6 +2,8 @@
 const path = require('path');
 const zlib = require('zlib');
 const cheerio = require('cheerio');
+const { removeInjectedAiSummaryInstructions } = require('./content_cleanup');
+const { resolveIssueCoverImageUrl } = require('./issue_cover');
 
 function loadConfig() {
   const configPath = path.resolve(process.env.CAIXIN_CONFIG || './config.json');
@@ -113,17 +115,18 @@ function mimeTypeFromExt(ext) {
 }
 
 function buildIndexHtml(manifest) {
-  const items = manifest.items.map((item) => {
+  const items = manifest.items.map((item, index) => {
     const meta = [item.author, item.pubDate].filter(Boolean).join(' | ');
-    return `<li><a href="${escapeHtml(item.file)}">${escapeHtml(item.title)}</a>${meta ? ` <span>${escapeHtml(meta)}</span>` : ''}</li>`;
+    return `<li><a href="articles/article-${String(index + 1).padStart(3, '0')}.xhtml">${escapeHtml(item.title)}</a>${meta ? ` <span>${escapeHtml(meta)}</span>` : ''}</li>`;
   }).join('\n');
 
-  return `<!DOCTYPE html>
-<html lang="zh-CN">
+  return `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN">
 <head>
-  <meta charset="utf-8" />
+  <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
   <title>${escapeHtml(manifest.title)}</title>
-  <style>
+  <style type="text/css">
     body { font-family: "Microsoft YaHei", sans-serif; max-width: 48em; margin: 0 auto; padding: 1.5em; line-height: 1.8; }
     h1 { margin-bottom: 0.3em; }
     .desc { color: #666; margin-bottom: 1.5em; }
@@ -138,6 +141,24 @@ function buildIndexHtml(manifest) {
   <ol>
     ${items}
   </ol>
+</body>
+</html>`;
+}
+
+function buildCoverHtml(title, coverImage) {
+  return `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN">
+<head>
+  <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+  <title>${escapeHtml(title)}</title>
+  <style type="text/css">
+    html, body { height: 100%; margin: 0; padding: 0; text-align: center; }
+    img { height: 100%; max-height: 100%; max-width: 100%; object-fit: contain; }
+  </style>
+</head>
+<body>
+  <img src="${escapeHtml(coverImage.href)}" alt="${escapeHtml(title)}" />
 </body>
 </html>`;
 }
@@ -174,7 +195,7 @@ ${navPoints}
 </ncx>`;
 }
 
-function buildContentOpf(metadata, items, images) {
+function buildContentOpf(metadata, items, images, coverImage) {
   const articleManifest = items.map((item, index) => {
     return `    <item id="a${index + 1}" href="${escapeXml(item.href)}" media-type="application/xhtml+xml"/>`;
   }).join('\n');
@@ -187,6 +208,15 @@ function buildContentOpf(metadata, items, images) {
     return `    <itemref idref="a${index + 1}"/>`;
   }).join('\n');
 
+  const coverMetadata = coverImage ? '\n    <meta name="cover" content="cover-image"/>' : '';
+  const coverManifest = coverImage
+    ? `\n    <item id="cover-page" href="cover.html" media-type="application/xhtml+xml"/>\n    <item id="cover-image" href="${escapeXml(coverImage.href)}" media-type="${escapeXml(coverImage.mediaType)}"/>`
+    : '';
+  const coverSpine = coverImage ? '\n    <itemref idref="cover-page" linear="yes"/>' : '';
+  const coverGuide = coverImage
+    ? '\n  <guide>\n    <reference type="cover" title="Cover" href="cover.html"/>\n  </guide>'
+    : '';
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <package version="2.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -194,18 +224,18 @@ function buildContentOpf(metadata, items, images) {
     <dc:title>${escapeXml(metadata.title)}</dc:title>
     <dc:language>zh-CN</dc:language>
     <dc:creator>${escapeXml(metadata.author || '财新周刊')}</dc:creator>
-    <dc:date>${escapeXml(metadata.date)}</dc:date>
+    <dc:date>${escapeXml(metadata.date)}</dc:date>${coverMetadata}
   </metadata>
   <manifest>
     <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
-    <item id="index" href="index.html" media-type="application/xhtml+xml"/>
+    <item id="index" href="index.html" media-type="application/xhtml+xml"/>${coverManifest}
 ${articleManifest}
 ${imageManifest}
   </manifest>
-  <spine toc="ncx">
+  <spine toc="ncx">${coverSpine}
     <itemref idref="index"/>
 ${articleSpine}
-  </spine>
+  </spine>${coverGuide}
 </package>`;
 }
 
@@ -253,6 +283,7 @@ function makeZip(entries) {
 
   for (const entry of entries) {
     const nameBuf = Buffer.from(normalizeZipPath(entry.name), 'utf8');
+    const flags = /[^\x00-\x7F]/.test(entry.name) ? 0x0800 : 0;
     const input = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(entry.data, 'utf8');
     const method = entry.store ? 0 : 8;
     const compressed = method === 0 ? input : zlib.deflateRawSync(input);
@@ -262,7 +293,7 @@ function makeZip(entries) {
     const localHeader = Buffer.alloc(30);
     localHeader.writeUInt32LE(0x04034B50, 0);
     localHeader.writeUInt16LE(20, 4);
-    localHeader.writeUInt16LE(0, 6);
+    localHeader.writeUInt16LE(flags, 6);
     localHeader.writeUInt16LE(method, 8);
     localHeader.writeUInt16LE(dosTime, 10);
     localHeader.writeUInt16LE(dosDate, 12);
@@ -278,7 +309,7 @@ function makeZip(entries) {
     centralHeader.writeUInt32LE(0x02014B50, 0);
     centralHeader.writeUInt16LE(20, 4);
     centralHeader.writeUInt16LE(20, 6);
-    centralHeader.writeUInt16LE(0, 8);
+    centralHeader.writeUInt16LE(flags, 8);
     centralHeader.writeUInt16LE(method, 10);
     centralHeader.writeUInt16LE(dosTime, 12);
     centralHeader.writeUInt16LE(dosDate, 14);
@@ -337,8 +368,96 @@ async function fetchWithTimeout(url, timeoutMs) {
   }
 }
 
-async function embedImagesIntoHtml(htmlText, baseUrl, imageState) {
-  const $ = cheerio.load(htmlText, { decodeEntities: false });
+function normalizeArticleXhtml($, baseUrl) {
+  const unwrapTags = ['cximg', 'cxread', 'cxcode', 'paywall'];
+  for (const tag of unwrapTags) {
+    $(tag).toArray().reverse().forEach((node) => {
+      $(node).replaceWith($(node).contents());
+    });
+  }
+
+  $('anchor, link, script, noscript, iframe').remove();
+  $('html, html *').contents().filter((_, node) => node.type === 'comment').remove();
+
+  const allowedTags = new Set([
+    'html', 'head', 'title', 'meta', 'style', 'body',
+    'div', 'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'a', 'img', 'br', 'hr', 'b', 'strong', 'i', 'em', 'small',
+    'sub', 'sup', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
+    'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td'
+  ]);
+
+  $('body *').toArray().reverse().forEach((node) => {
+    if (!allowedTags.has(String(node.tagName || '').toLowerCase())) {
+      $(node).replaceWith($(node).contents());
+    }
+  });
+
+  const globalAttributes = new Set(['id', 'class', 'title', 'lang', 'xml:lang', 'dir']);
+  const tagAttributes = {
+    a: new Set(['href', 'name', 'rel']),
+    img: new Set(['src', 'alt', 'width', 'height']),
+    meta: new Set(['http-equiv', 'content', 'name']),
+    style: new Set(['type']),
+    td: new Set(['colspan', 'rowspan', 'headers']),
+    th: new Set(['colspan', 'rowspan', 'headers', 'scope'])
+  };
+
+  $('*').each((_, node) => {
+    const element = $(node);
+    const tagName = String(node.tagName || '').toLowerCase();
+    const allowed = tagAttributes[tagName] || new Set();
+    for (const name of Object.keys(node.attribs || {})) {
+      if (!globalAttributes.has(name) && !allowed.has(name)) {
+        element.removeAttr(name);
+      }
+    }
+  });
+
+  $('a').each((_, node) => {
+    const link = $(node);
+    const href = String(link.attr('href') || '').trim();
+    if (!href || href.startsWith('#') || /^mailto:/i.test(href)) {
+      return;
+    }
+    if (/^https?:\/\//i.test(href)) {
+      return;
+    }
+    if (/^(?:\/|\.\/|\.\.\/|\/\/)/.test(href)) {
+      const absolute = normalizeUrl(href, baseUrl);
+      if (absolute && /^https?:\/\//i.test(absolute)) {
+        link.attr('href', absolute);
+        return;
+      }
+    }
+    link.removeAttr('href');
+  });
+  $('img').each((_, node) => {
+    const img = $(node);
+    if (!img.attr('alt')) {
+      img.attr('alt', '');
+    }
+  });
+
+  $('html')
+    .attr('xmlns', 'http://www.w3.org/1999/xhtml')
+    .attr('xml:lang', 'zh-CN')
+    .removeAttr('lang');
+  $('head meta').remove();
+  $('head').prepend('<meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8"/>');
+  $('style').attr('type', 'text/css');
+
+  const serialized = $.xml().replace(/^<!DOCTYPE html>/i, '');
+  return `<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">\n${serialized}`;
+}
+
+async function embedImagesIntoHtml(htmlText, baseUrl, imageState, articleTitle) {
+  const $ = cheerio.load(htmlText, { decodeEntities: true });
+  removeInjectedAiSummaryInstructions($, $('body'));
+  if (articleTitle) {
+    $('title').first().text(articleTitle);
+    $('body > h1').first().text(articleTitle);
+  }
   const imageNodes = $('img').toArray();
 
   for (const node of imageNodes) {
@@ -352,9 +471,13 @@ async function embedImagesIntoHtml(htmlText, baseUrl, imageState) {
     if (!/^https?:\/\//i.test(absolute)) {
       continue;
     }
+    if (/favicon\.ico(?:$|\?)/i.test(absolute)) {
+      img.remove();
+      continue;
+    }
 
     if (imageState.byUrl.has(absolute)) {
-      img.attr('src', imageState.byUrl.get(absolute).href);
+      img.attr('src', `../${imageState.byUrl.get(absolute).href}`);
       continue;
     }
 
@@ -372,13 +495,13 @@ async function embedImagesIntoHtml(htmlText, baseUrl, imageState) {
       const imageItem = { href, data: downloaded.data, mediaType };
       imageState.byUrl.set(absolute, imageItem);
       imageState.items.push(imageItem);
-      img.attr('src', href);
+      img.attr('src', `../${href}`);
     } catch (error) {
       console.warn(`Image download failed: ${absolute} (${error.message || error})`);
     }
   }
 
-  return $.html();
+  return normalizeArticleXhtml($, baseUrl);
 }
 
 async function buildEpub(issueDir, manifest, outputFile, config) {
@@ -387,6 +510,26 @@ async function buildEpub(issueDir, manifest, outputFile, config) {
     items: [],
     timeoutMs: Number(config.imageDownloadTimeoutMs || 20000)
   };
+
+  let coverImage = null;
+  try {
+    const coverUrl = await resolveIssueCoverImageUrl(manifest, config);
+    if (coverUrl) {
+      const downloaded = await fetchWithTimeout(coverUrl, imageState.timeoutMs);
+      const ext = extFromMimeType(downloaded.contentType) || inferExtFromUrl(coverUrl) || '.jpg';
+      coverImage = {
+        href: `images/cover${ext}`,
+        data: downloaded.data,
+        mediaType: mimeTypeFromExt(ext)
+      };
+      imageState.byUrl.set(coverUrl, coverImage);
+      console.log(`Embedded issue cover: ${coverUrl}`);
+    } else {
+      console.warn('Issue cover image not found; EPUB will start with the table of contents.');
+    }
+  } catch (error) {
+    console.warn(`Issue cover download failed: ${error.message || error}`);
+  }
 
   const articleItems = [];
 
@@ -398,11 +541,16 @@ async function buildEpub(issueDir, manifest, outputFile, config) {
     }
 
     const htmlText = fs.readFileSync(sourcePath, 'utf-8');
-    const htmlWithLocalImages = await embedImagesIntoHtml(htmlText, item.url || manifest.sourceIssueUrl || '', imageState);
+    const htmlWithLocalImages = await embedImagesIntoHtml(
+      htmlText,
+      item.url || manifest.sourceIssueUrl || '',
+      imageState,
+      item.title
+    );
 
     articleItems.push({
       title: item.title || `Article ${index + 1}`,
-      href: normalizeZipPath(item.file),
+      href: `articles/article-${String(index + 1).padStart(3, '0')}.xhtml`,
       data: Buffer.from(htmlWithLocalImages, 'utf-8')
     });
   }
@@ -418,9 +566,13 @@ async function buildEpub(issueDir, manifest, outputFile, config) {
   const entries = [
     { name: 'mimetype', data: 'application/epub+zip', store: true },
     { name: 'META-INF/container.xml', data: buildContainerXml() },
-    { name: 'OEBPS/content.opf', data: buildContentOpf(metadata, articleItems, imageState.items) },
+    { name: 'OEBPS/content.opf', data: buildContentOpf(metadata, articleItems, imageState.items, coverImage) },
     { name: 'OEBPS/toc.ncx', data: buildTocNcx(metadata, articleItems) },
     { name: 'OEBPS/index.html', data: indexHtml },
+    ...(coverImage ? [
+      { name: 'OEBPS/cover.html', data: buildCoverHtml(metadata.title, coverImage) },
+      { name: `OEBPS/${coverImage.href}`, data: coverImage.data }
+    ] : []),
     ...articleItems.map((item) => ({ name: `OEBPS/${item.href}`, data: item.data })),
     ...imageState.items.map((img) => ({ name: `OEBPS/${img.href}`, data: img.data }))
   ];

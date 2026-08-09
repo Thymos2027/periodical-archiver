@@ -21,12 +21,19 @@
 
 - Windows
 - Node.js 20 或更高版本
+- pnpm 10.14.0（可通过 Node.js 自带的 Corepack 启用）
 - Google Chrome；无法启动时可按配置回退到 Edge 或 Playwright Chromium
+
+启用项目声明的 pnpm 版本：
+
+```powershell
+corepack enable
+```
 
 安装项目依赖：
 
 ```powershell
-npm install
+pnpm install
 ```
 
 当前 EPUB 和 PDF 都由项目直接生成，不需要安装 Calibre。
@@ -54,7 +61,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\open_chrome_profile.ps1
 推荐直接执行：
 
 ```powershell
-npm run archive -- "https://weekly.caixin.com/..."
+pnpm run archive -- "https://weekly.caixin.com/..."
 ```
 
 参数应当是目标期刊的目录页或专题页 URL。命令会依次：
@@ -70,26 +77,34 @@ npm run archive -- "https://weekly.caixin.com/..."
 只抓取文章：
 
 ```powershell
-npm run fetch -- "https://weekly.caixin.com/..."
+pnpm run fetch -- "https://weekly.caixin.com/..."
 ```
+
+如果某一期抓取过程中有文章因页面加载异常被跳过，可以断点续抓：
+
+```powershell
+pnpm run fetch -- "https://weekly.caixin.com/..." --resume
+```
+
+断点模式会复用 `manifest.json` 中已经成功保存的文章，只为缺失链接启动隔离浏览器重试。补抓完成后，再运行 EPUB 和 PDF 生成命令覆盖原成品。
 
 使用最近一次抓取结果生成 EPUB：
 
 ```powershell
-npm run build:epub
+pnpm run build:epub
 ```
 
 使用最近一次抓取结果生成 PDF：
 
 ```powershell
-npm run build:pdf
+pnpm run build:pdf
 ```
 
 也可以明确指定某一期的临时目录：
 
 ```powershell
-npm run build:epub -- ".\tmp\财新周刊-2026年10期"
-npm run build:pdf -- ".\tmp\财新周刊-2026年10期"
+pnpm run build:epub -- ".\tmp\财新周刊-2026年10期"
+pnpm run build:pdf -- ".\tmp\财新周刊-2026年10期"
 ```
 
 这样可以在不重新访问财新网站的情况下，反复调整并重新生成阅读文件。
@@ -106,17 +121,17 @@ npm run build:pdf -- ".\tmp\财新周刊-2026年10期"
 - 正文长度
 - 是否点击过“展开全文”
 
-抓取过程会自动滚动页面、尝试点击“余下全文”“展开全文”“阅读全文”，并过滤广告、推荐阅读、相关报道、脚本和页面导航等内容。单篇文章失败会被跳过，其余文章继续处理。
+抓取过程会自动滚动页面、尝试点击“余下全文”“展开全文”“阅读全文”，并兼容“余下全文”跳转到第二页的旧式分页文章。自动滚动设有最长时限，避免推荐内容持续加载导致单篇文章无限等待。抓取时会过滤广告、推荐阅读、相关报道、页面导航，以及网页中供 AI 抓取器读取的总结提示等非正文内容。对于“显影”等没有普通 `<h1>` 的互动页面，会依次使用期刊目录标题、Open Graph 标题和网页标题作为备用。普通模式下单篇文章首次失败后会使用新的浏览器页面重试，其余文章继续处理。
 
 ### EPUB
 
-EPUB 包含文章目录、正文和下载到本地的文章图片，适合电子书阅读器使用。
+EPUB 使用该期财新周刊的原版封面，并包含文章目录、正文和下载到本地的文章图片，适合电子书阅读器使用。原版封面同时写入 EPUB 封面元数据，阅读器书架可以直接显示。
 
 ### PDF
 
 PDF 使用 A4 版式，包含：
 
-- 独立封面页
+- 该期财新周刊的原版封面页
 - 可点击目录
 - 每篇文章从新页开始
 - 作者、栏目和日期信息
@@ -135,6 +150,7 @@ PDF 由无界面的 Chrome 排版生成，中文字体使用系统字体，无�
 - `targetSections`：需要识别的栏目。
 - `sectionDownloadOrder`：文章下载和成书顺序。
 - `selectors`：标题、作者、日期和正文的 CSS 选择器。
+- `selectors.issueCover`：从期刊目录页识别原版封面的 CSS 选择器。
 - `removeSelectors`：从正文中删除的页面元素。
 - `minBodyTextLength`：认为正文已经基本加载完成的长度。
 - `headless`：抓取时是否隐藏浏览器窗口；调试建议设为 `false`。

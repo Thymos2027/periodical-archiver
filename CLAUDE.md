@@ -9,11 +9,12 @@ A personal archiving tool for Caixin Weekly (财新周刊) that captures article
 ## Commands
 
 ```powershell
-npm install                    # Install dependencies
-npm run fetch -- "<issue_url>" # Fetch articles from a weekly issue URL
-npm run build:epub             # Build EPUB from most recent fetch (in tmp/)
-npm run build:epub -- ".\tmp\<issue_dir>"  # Build EPUB from specific issue directory
-npm run archive -- "<issue_url>"           # Run fetch + build in sequence
+corepack enable                 # Enable the package manager shim provided by Node.js
+pnpm install                    # Install dependencies
+pnpm run fetch -- "<issue_url>" # Fetch articles from a weekly issue URL
+pnpm run build:epub             # Build EPUB from most recent fetch (in tmp/)
+pnpm run build:epub -- ".\tmp\<issue_dir>"  # Build EPUB from specific issue directory
+pnpm run archive -- "<issue_url>"           # Run fetch + build in sequence
 powershell -ExecutionPolicy Bypass -File .\scripts\open_chrome_profile.ps1  # Open Chrome with dedicated profile for login
 ```
 
@@ -45,6 +46,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\open_chrome_profile.ps1  # Op
 ## Environment
 
 - Node.js 20+ required
+- pnpm 10.14.0 (declared in `package.json`; enable it with Corepack)
 - Chrome must be installed
 - Calibre required for EPUB generation (`CALIBRE_EBOOK_CONVERT` env var or default install path)
 - `CAIXIN_CONFIG` env var can override config file path

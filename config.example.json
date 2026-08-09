@@ -45,6 +45,7 @@
     "\\.html?$"
   ],
   "selectors": {
+    "issueCover": ".cover img, img[alt*='财新周刊']",
     "articleTitle": "h1",
     "articleAuthor": ".author, .article-author, [class*='author']",
     "articleDate": ".time, .date, .pubtime, time",
@@ -61,11 +62,13 @@
     ".share",
     ".related",
     ".recommend",
-    ".comment"
+    ".comment",
+    ".aitt"
   ],
   "noProxy": true,
   "proxyServer": "",
   "navigationRetries": 4,
+  "articleRetryPasses": 1,
   "navigationTimeoutMs": 90000,
   "minBodyTextLength": 800,
   "skipTitleKeywords": [

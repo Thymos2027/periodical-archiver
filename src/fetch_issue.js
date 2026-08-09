@@ -2,6 +2,8 @@
 const path = require('path');
 const { chromium } = require('playwright');
 const cheerio = require('cheerio');
+const { removeInjectedAiSummaryInstructions } = require('./content_cleanup');
+const { detectIssueCoverImageUrl } = require('./issue_cover');
 
 function loadConfig() {
   const configPath = path.resolve(process.env.CAIXIN_CONFIG || './config.json');
@@ -93,9 +95,11 @@ async function autoScroll(page) {
   await page.evaluate(async () => {
     await new Promise((resolve) => {
       let stableRounds = 0;
+      let totalRounds = 0;
       let previousHeight = -1;
 
       const timer = setInterval(() => {
+        totalRounds += 1;
         window.scrollBy(0, 1000);
         const nextHeight = document.body.scrollHeight;
         if (nextHeight === previousHeight) {
@@ -105,7 +109,7 @@ async function autoScroll(page) {
         }
 
         previousHeight = nextHeight;
-        if (stableRounds >= 3) {
+        if (stableRounds >= 3 || totalRounds >= 12) {
           clearInterval(timer);
           resolve();
         }
@@ -165,6 +169,15 @@ async function revealFullText(page) {
     }
 
     try {
+      const href = await button.getAttribute('href');
+      if (href && /(?:\?p\d*|#page\d+)/i.test(href)) {
+        const targetUrl = new URL(href, page.url()).toString();
+        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        await page.waitForTimeout(2500);
+        clickedCount += 1;
+        break;
+      }
+
       await button.click({ timeout: 3000 });
       clickedCount += 1;
     } catch {
@@ -238,8 +251,8 @@ function hasBlockedTitle(title, config) {
 }
 
 async function gotoWithRetry(page, url, config) {
-  const retries = Number(config.navigationRetries || 4);
-  const timeoutMs = Number(config.navigationTimeoutMs || 90000);
+  const retries = Number(process.env.CAIXIN_NAVIGATION_RETRIES || config.navigationRetries || 4);
+  const timeoutMs = Number(process.env.CAIXIN_NAVIGATION_TIMEOUT_MS || config.navigationTimeoutMs || 90000);
   let lastError = null;
 
   for (let attempt = 1; attempt <= retries; attempt += 1) {
@@ -266,6 +279,11 @@ async function collectIssueLinks(page, issueUrl, config) {
   await page.waitForTimeout(1000);
   const pageText = await page.evaluate(() => document.body ? document.body.innerText : '');
   const detectedIssueTitle = detectIssueLabel(pageText, config);
+  const detectedCoverImageUrl = detectIssueCoverImageUrl(
+    await page.content(),
+    issueUrl,
+    config.selectors && config.selectors.issueCover
+  );
 
   const targetSections = Array.isArray(config.targetSections) ? config.targetSections : [];
 
@@ -349,7 +367,8 @@ async function collectIssueLinks(page, issueUrl, config) {
 
   return {
     links: orderedLinks.slice(0, Number(config.articleLimit || 30)),
-    detectedIssueTitle
+    detectedIssueTitle,
+    detectedCoverImageUrl
   };
 }
 
@@ -443,7 +462,7 @@ function pruneIrrelevantBlocks($, contentEl, includeCoverContext) {
 
       const links = block.find('a').length;
       const images = block.find('img').length;
-      if (links > 0 || images > 0 || text.length < 140) {
+      if (text.length < 500 && (links > 0 || images > 0 || text.length < 140)) {
         block.remove();
       }
     });
@@ -464,14 +483,22 @@ function pruneIrrelevantBlocks($, contentEl, includeCoverContext) {
         || token.includes('封面');
 
       if (looksLikeCover) {
-        image.closest('figure,p,div,section').remove();
+        const block = image.closest('figure,p').first();
+        if (block.length && String(block.text() || '').replace(/\s+/g, '').length < 500) {
+          block.remove();
+        } else {
+          image.remove();
+        }
       }
     });
 
     contentEl.find('h1,h2,h3,h4,strong,b').each((_, node) => {
       const text = String($(node).text() || '').replace(/\s+/g, '');
       if (text.includes('封面报道') || text.includes('CoverStory')) {
-        $(node).closest('section,div,article').remove();
+        const block = $(node).closest('p,li,figure,section,div,article').first();
+        if (block.length && String(block.text() || '').replace(/\s+/g, '').length < 500) {
+          block.remove();
+        }
       }
     });
   }
@@ -495,7 +522,7 @@ function extractBodyTextLength(contentEl) {
   return String(contentEl.text() || '').replace(/\s+/g, '').length;
 }
 
-function parseArticleSnapshot(html, config, articleUrl, includeCoverContext) {
+function parseArticleSnapshot(html, config, articleUrl, includeCoverContext, fallbackTitle) {
   const $ = cheerio.load(html);
   const titleEl = pickFirst($, config.selectors.articleTitle);
   const authorEl = pickFirst($, config.selectors.articleAuthor);
@@ -507,6 +534,7 @@ function parseArticleSnapshot(html, config, articleUrl, includeCoverContext) {
   }
 
   cleanupDom(contentEl, config.removeSelectors || []);
+  removeInjectedAiSummaryInstructions($, contentEl);
   pruneIrrelevantBlocks($, contentEl, includeCoverContext);
 
   contentEl.find('img').each((_, image) => {
@@ -522,8 +550,20 @@ function parseArticleSnapshot(html, config, articleUrl, includeCoverContext) {
     delete attribs['data-original'];
   });
 
+  const pageTitle = $('title').first().text().trim()
+    .replace(/\s*[_-]财新(?:周刊频道)?_?财新网\s*$/i, '')
+    .trim();
+  const titleCandidates = [
+    titleEl ? titleEl.text().trim() : '',
+    String(fallbackTitle || '').trim(),
+    String($('meta[property="og:title"]').attr('content') || '').trim(),
+    String($('meta[name="twitter:title"]').attr('content') || '').trim(),
+    pageTitle
+  ];
+  const resolvedTitle = titleCandidates.find((candidate) => candidate && candidate.toLowerCase() !== 'untitled') || 'untitled';
+
   return {
-    title: titleEl ? titleEl.text().trim() : 'untitled',
+    title: resolvedTitle,
     author: authorEl ? authorEl.text().trim() : '',
     pubDate: dateEl ? dateEl.text().trim() : '',
     contentHtml: contentEl.html() || '',
@@ -531,7 +571,7 @@ function parseArticleSnapshot(html, config, articleUrl, includeCoverContext) {
   };
 }
 
-async function waitForBestSnapshot(page, config, articleUrl, includeCoverContext) {
+async function waitForBestSnapshot(page, config, articleUrl, includeCoverContext, fallbackTitle) {
   const targetLength = Number(config.minBodyTextLength || 800);
   const minAcceptLength = Number(config.minAcceptBodyTextLength || 280);
   const passes = Number(config.articleLoadPasses || 8);
@@ -549,7 +589,7 @@ async function waitForBestSnapshot(page, config, articleUrl, includeCoverContext
     await page.waitForTimeout(passDelayMs);
 
     const html = await page.content();
-    const snapshot = parseArticleSnapshot(html, config, articleUrl, includeCoverContext);
+    const snapshot = parseArticleSnapshot(html, config, articleUrl, includeCoverContext, fallbackTitle);
     if (!snapshot) {
       continue;
     }
@@ -584,10 +624,16 @@ async function waitForBestSnapshot(page, config, articleUrl, includeCoverContext
   throw new Error(`Could not find article body for ${articleUrl}`);
 }
 
-async function extractArticle(page, articleUrl, config, includeCoverContext) {
+async function extractArticle(page, articleUrl, config, includeCoverContext, fallbackTitle) {
   await gotoWithRetry(page, articleUrl, config);
 
-  const { snapshot, totalClicks } = await waitForBestSnapshot(page, config, articleUrl, includeCoverContext);
+  const { snapshot, totalClicks } = await waitForBestSnapshot(
+    page,
+    config,
+    articleUrl,
+    includeCoverContext,
+    fallbackTitle
+  );
 
   return {
     url: articleUrl,
@@ -677,7 +723,9 @@ async function launchBrowserContext(config) {
 
 async function main() {
   const config = loadConfig();
-  const issueUrl = process.argv[2] || config.issueUrl;
+  const cliArgs = process.argv.slice(2);
+  const resumeExisting = cliArgs.includes('--resume');
+  const issueUrl = cliArgs.find((arg) => !arg.startsWith('--')) || config.issueUrl;
   if (!issueUrl) {
     throw new Error('Missing issue URL. Pass it as the first argument or set config.issueUrl.');
   }
@@ -686,12 +734,12 @@ async function main() {
   ensureDir(path.resolve(config.tempDir));
   ensureDir(path.resolve(config.outputDir));
 
-  const context = await launchBrowserContext(config);
+  let context = await launchBrowserContext(config);
   const existingPages = context.pages();
   const page = existingPages.length ? existingPages[0] : await context.newPage();
 
   console.log(`Opening issue page: ${issueUrl}`);
-  const { links, detectedIssueTitle } = await collectIssueLinks(page, issueUrl, config);
+  const { links, detectedIssueTitle, detectedCoverImageUrl } = await collectIssueLinks(page, issueUrl, config);
   console.log('Candidate article links: ' + links.length);
 
   if (!links.length) {
@@ -704,45 +752,119 @@ async function main() {
   } else {
     console.warn('Issue label not found on page, fallback to date-based title.');
   }
+  if (detectedCoverImageUrl) {
+    console.log(`Detected issue cover: ${detectedCoverImageUrl}`);
+  } else {
+    console.warn('Issue cover image not found on page.');
+  }
   const issueDir = path.join(path.resolve(config.tempDir), safeSlug(issueTitle));
   ensureDir(issueDir);
+
+  const manifestPath = path.join(issueDir, 'manifest.json');
+  let existingItemsByUrl = new Map();
+  if (resumeExisting && fs.existsSync(manifestPath)) {
+    try {
+      const existingManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+      existingItemsByUrl = new Map(
+        (Array.isArray(existingManifest.items) ? existingManifest.items : [])
+          .filter((item) => item && item.url && item.file)
+          .map((item) => [item.url, item])
+      );
+      console.log(`Resume mode: ${existingItemsByUrl.size} existing articles available.`);
+    } catch (error) {
+      console.warn(`Could not read existing manifest, starting normally: ${error.message}`);
+    }
+  }
 
   const manifest = {
     title: issueTitle,
     sourceIssueUrl: issueUrl,
+    coverImageUrl: detectedCoverImageUrl,
     createdAt: new Date().toISOString(),
     items: []
   };
+
+  const itemsByIndex = new Array(links.length).fill(null);
+  let failedIndexes = [];
+
+  function saveArticle(index, link, article) {
+    const fileName = `${String(index + 1).padStart(2, '0')}_${safeSlug(article.title)}.html`;
+    const outputPath = path.join(issueDir, fileName);
+    fs.writeFileSync(outputPath, buildArticleHtml(article), 'utf-8');
+    itemsByIndex[index] = {
+      title: article.title,
+      author: article.author,
+      pubDate: article.pubDate,
+      section: link.section || '',
+      url: article.url,
+      bodyTextLength: article.bodyTextLength,
+      fullTextClicks: article.revealClickedTimes,
+      file: fileName
+    };
+  }
 
   for (let index = 0; index < links.length; index += 1) {
     const link = links[index];
     const prefix = link.section ? `[${link.section}] ` : '';
     console.log(`[${index + 1}/${links.length}] ${prefix}${link.text || link.href}`);
 
-    try {
-      const article = await extractArticle(page, link.href, config, index === 0);
-      console.log(`  -> bodyTextLength=${article.bodyTextLength}, fullTextClicks=${article.revealClickedTimes}`);
+    const existingItem = existingItemsByUrl.get(link.href);
+    if (existingItem && fs.existsSync(path.join(issueDir, existingItem.file))) {
+      itemsByIndex[index] = {
+        ...existingItem,
+        section: link.section || existingItem.section || ''
+      };
+      console.log(`  -> reused ${existingItem.file}`);
+      continue;
+    }
 
-      const fileName = `${String(index + 1).padStart(2, '0')}_${safeSlug(article.title)}.html`;
-      const outputPath = path.join(issueDir, fileName);
-      fs.writeFileSync(outputPath, buildArticleHtml(article), 'utf-8');
-      manifest.items.push({
-        title: article.title,
-        author: article.author,
-        pubDate: article.pubDate,
-        section: link.section || '',
-        url: article.url,
-        bodyTextLength: article.bodyTextLength,
-        fullTextClicks: article.revealClickedTimes,
-        file: fileName
-      });
+    if (resumeExisting) {
+      failedIndexes.push(index);
+      console.log('  -> queued for isolated retry');
+      continue;
+    }
+
+    try {
+      const article = await extractArticle(page, link.href, config, index === 0, link.text);
+      console.log(`  -> bodyTextLength=${article.bodyTextLength}, fullTextClicks=${article.revealClickedTimes}`);
+      saveArticle(index, link, article);
     } catch (error) {
-      console.warn(`Skip ${link.href}`);
+      failedIndexes.push(index);
+      console.warn(`Initial attempt failed ${link.href}`);
       console.warn(error.message);
     }
   }
 
-  const manifestPath = path.join(issueDir, 'manifest.json');
+  const retryPasses = Math.max(0, Number(config.articleRetryPasses ?? 1));
+  for (let pass = 1; pass <= retryPasses && failedIndexes.length; pass += 1) {
+    console.warn(`Retry pass ${pass}/${retryPasses}: ${failedIndexes.length} article(s).`);
+    const remainingIndexes = [];
+    for (const index of failedIndexes) {
+      const link = links[index];
+      const prefix = link.section ? `[${link.section}] ` : '';
+      console.log(`[retry ${pass}] [${index + 1}/${links.length}] ${prefix}${link.text || link.href}`);
+      await context.close().catch(() => {});
+      context = await launchBrowserContext(config);
+      const retryPages = context.pages();
+      const retryPage = retryPages.length ? retryPages[0] : await context.newPage();
+      try {
+        const article = await extractArticle(retryPage, link.href, config, index === 0, link.text);
+        console.log(`  -> bodyTextLength=${article.bodyTextLength}, fullTextClicks=${article.revealClickedTimes}`);
+        saveArticle(index, link, article);
+      } catch (error) {
+        remainingIndexes.push(index);
+        console.warn(`Retry failed ${link.href}`);
+        console.warn(error.message);
+      }
+    }
+    failedIndexes = remainingIndexes;
+  }
+
+  for (const index of failedIndexes) {
+    console.warn(`Skip after retries ${links[index].href}`);
+  }
+
+  manifest.items = itemsByIndex.filter(Boolean);
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
   console.log(`Saved issue files to ${issueDir}`);
   await context.close();

@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const cheerio = require('cheerio');
 const { chromium } = require('playwright');
+const { removeInjectedAiSummaryInstructions } = require('./content_cleanup');
+const { resolveIssueCoverImageUrl } = require('./issue_cover');
 
 function loadConfig() {
   const configPath = path.resolve(process.env.CAIXIN_CONFIG || './config.json');
@@ -112,6 +114,7 @@ function readArticles(issueDir, manifest) {
     }
 
     const $ = cheerio.load(fs.readFileSync(sourcePath, 'utf-8'), { decodeEntities: false });
+    removeInjectedAiSummaryInstructions($, $('body'));
     const content = $('.content').first();
     const contentHtml = content.length ? content.html() : $('body').html();
 
@@ -174,7 +177,12 @@ async function inlineArticleImages(articles, config) {
   console.log(`Embedded PDF images: ${imageMap.size}/${urls.length}`);
 }
 
-function buildPrintHtml(manifest, articles) {
+function buildPrintHtml(manifest, articles, coverDataUrl, pdfConfig) {
+  const pageFormat = pdfConfig.format || 'A4';
+  const marginTop = pdfConfig.marginTop || '16mm';
+  const marginRight = pdfConfig.marginRight || '16mm';
+  const marginBottom = pdfConfig.marginBottom || '18mm';
+  const marginLeft = pdfConfig.marginLeft || '16mm';
   const toc = articles.map((article) => {
     const meta = [article.section, article.author].filter(Boolean).join(' / ');
     return `<li><a href="#article-${article.index + 1}">${escapeHtml(article.title)}</a>${meta ? `<span>${escapeHtml(meta)}</span>` : ''}</li>`;
@@ -200,10 +208,14 @@ function buildPrintHtml(manifest, articles) {
     html { color: #202124; font-family: "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", sans-serif; }
     body { margin: 0; font-size: 10.5pt; line-height: 1.75; }
     a { color: inherit; text-decoration: none; }
-    .cover { min-height: 245mm; display: flex; flex-direction: column; justify-content: center; text-align: center; break-after: page; }
-    .cover-kicker { color: #b31b1b; font-size: 12pt; letter-spacing: 0.24em; margin-bottom: 14mm; }
-    .cover h1 { font-family: "Noto Serif CJK SC", "SimSun", serif; font-size: 31pt; line-height: 1.35; margin: 0 auto 10mm; max-width: 160mm; }
-    .cover-source { color: #777; font-size: 9pt; overflow-wrap: anywhere; }
+    @page {
+      size: ${pageFormat};
+      margin: ${marginTop} ${marginRight} ${marginBottom} ${marginLeft};
+      @bottom-center { content: counter(page) " / " counter(pages); color: #777; font: 8px sans-serif; }
+    }
+    @page:first { @bottom-center { content: none; } }
+    .cover { align-items: center; break-after: page; display: flex; height: 245mm; justify-content: center; text-align: center; }
+    .cover img { height: 100%; max-width: 100%; object-fit: contain; }
     .toc { break-after: page; }
     .toc h1 { border-bottom: 2px solid #b31b1b; font-size: 21pt; padding-bottom: 4mm; }
     .toc ol { padding-left: 7mm; }
@@ -225,11 +237,7 @@ function buildPrintHtml(manifest, articles) {
   </style>
 </head>
 <body>
-  <section class="cover">
-    <div class="cover-kicker">个人离线归档</div>
-    <h1>${escapeHtml(manifest.title)}</h1>
-    <div class="cover-source">${escapeHtml(manifest.sourceIssueUrl || '')}</div>
-  </section>
+  ${coverDataUrl ? `<section class="cover"><img src="${coverDataUrl}" alt="${escapeHtml(manifest.title)}" /></section>` : ''}
   <nav class="toc">
     <h1>目录</h1>
     <ol>${toc}</ol>
@@ -273,7 +281,20 @@ async function launchPrintBrowser(config) {
 async function buildPdf(issueDir, manifest, outputFile, config) {
   const articles = readArticles(issueDir, manifest);
   await inlineArticleImages(articles, config);
-  const printHtml = buildPrintHtml(manifest, articles);
+  const pdfConfig = config.pdf || {};
+  let coverDataUrl = '';
+  try {
+    const coverUrl = await resolveIssueCoverImageUrl(manifest, config);
+    if (coverUrl) {
+      coverDataUrl = await fetchImageAsDataUrl(coverUrl, Number(config.imageDownloadTimeoutMs || 20000));
+      console.log(`Embedded issue cover: ${coverUrl}`);
+    } else {
+      console.warn('Issue cover image not found; PDF will start with the table of contents.');
+    }
+  } catch (error) {
+    console.warn(`Issue cover download failed: ${error.message || error}`);
+  }
+  const printHtml = buildPrintHtml(manifest, articles, coverDataUrl, pdfConfig);
 
   const browser = await launchPrintBrowser(config);
   try {
@@ -293,20 +314,12 @@ async function buildPdf(issueDir, manifest, outputFile, config) {
       }));
     });
 
-    const pdfConfig = config.pdf || {};
     await page.pdf({
       path: outputFile,
       format: pdfConfig.format || 'A4',
+      preferCSSPageSize: true,
       printBackground: true,
-      displayHeaderFooter: true,
-      headerTemplate: '<div></div>',
-      footerTemplate: '<div style="font-size:8px;color:#777;text-align:center;width:100%;"><span class="pageNumber"></span> / <span class="totalPages"></span></div>',
-      margin: {
-        top: pdfConfig.marginTop || '16mm',
-        right: pdfConfig.marginRight || '16mm',
-        bottom: pdfConfig.marginBottom || '18mm',
-        left: pdfConfig.marginLeft || '16mm'
-      },
+      displayHeaderFooter: false,
       tagged: true,
       outline: true
     });
