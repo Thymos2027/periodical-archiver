@@ -3,6 +3,7 @@
   "profileDir": "./profile",
   "tempDir": "./tmp",
   "outputDir": "./output",
+  "pdfOutputDir": "./output/pdf",
   "bookTitlePrefix": "财新周刊",
   "headless": false,
   "browserChannel": "chrome",
@@ -81,6 +82,15 @@
   "minAcceptBodyTextLength": 280,
   "articleLoadPasses": 8,
   "articlePassDelayMs": 2000,
+  "imageDownloadTimeoutMs": 20000,
+  "imageDownloadConcurrency": 8,
+  "pdf": {
+    "format": "A4",
+    "marginTop": "16mm",
+    "marginRight": "16mm",
+    "marginBottom": "18mm",
+    "marginLeft": "16mm"
+  },
   "browserFallbackChannels": [
     "msedge"
   ],

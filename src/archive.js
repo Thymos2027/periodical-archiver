@@ -14,4 +14,12 @@ const buildResult = spawnSync(process.execPath, ['src/build_epub.js'], {
   stdio: 'inherit'
 });
 
-process.exit(buildResult.status || 0);
+if (buildResult.status !== 0) {
+  process.exit(buildResult.status || 1);
+}
+
+const pdfResult = spawnSync(process.execPath, ['src/build_pdf.js'], {
+  stdio: 'inherit'
+});
+
+process.exit(pdfResult.status || 0);
