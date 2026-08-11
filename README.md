@@ -1,6 +1,6 @@
 # 财新周刊个人归档工具
 
-这是一个面向个人离线阅读的 Windows 工作流。它复用你自己已经登录的财新账号，抓取当前账号有权阅读的某一期周刊文章，然后生成 EPUB 和 PDF 两个版本。
+这是一个面向个人离线阅读和个人文本研究的 Windows 工作流。它复用你自己已经登录的财新账号，抓取当前账号有权阅读的某一期周刊文章，然后生成 EPUB、PDF 和 UTF-8 TXT 三个版本。
 
 项目不会破解验证码、绕过付费权限、逆向私有接口或共享账号。登录信息只保存在本机的专用 Chrome 用户目录中。
 
@@ -10,12 +10,13 @@
 
 1. 使用项目专用的 Chrome 配置目录手动登录财新。
 2. Playwright 复用登录状态，从某一期周刊页面收集并清洗文章。
-3. 根据本地文章归档生成 EPUB 和适合打印、批注的 PDF。
+3. 根据本地文章归档生成 EPUB、适合打印批注的 PDF，以及便于文本处理的 TXT。
 
 抓取结果保存在 `tmp/<期号>/`，生成文件保存在：
 
-- EPUB：`output/<期号>.epub`
+- EPUB：`output/epub/<期号>.epub`
 - PDF：`output/pdf/<期号>.pdf`
+- TXT：`output/txt/<期号>.txt`
 
 ## 环境准备
 
@@ -36,7 +37,7 @@ corepack enable
 pnpm install
 ```
 
-当前 EPUB 和 PDF 都由项目直接生成，不需要安装 Calibre。
+当前 EPUB、PDF 和 TXT 都由项目直接生成，不需要安装 Calibre。
 
 ## 第一次登录
 
@@ -56,7 +57,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\open_chrome_profile.ps1
 
 如果抓取时提示浏览器配置目录正在使用，请先关闭所有通过这个专用目录打开的 Chrome 窗口。
 
-## 一次生成某一期的 EPUB 和 PDF
+## 一次生成某一期的 EPUB、PDF 和 TXT
 
 推荐直接执行：
 
@@ -69,6 +70,7 @@ pnpm run archive -- "https://weekly.caixin.com/..."
 1. 抓取文章并写入 `tmp/<期号>/`。
 2. 生成 EPUB。
 3. 生成 PDF。
+4. 生成 TXT。
 
 任何一步失败都会停止，不会把不完整的后续文件误报为成功。
 
@@ -86,7 +88,7 @@ pnpm run fetch -- "https://weekly.caixin.com/..."
 pnpm run fetch -- "https://weekly.caixin.com/..." --resume
 ```
 
-断点模式会复用 `manifest.json` 中已经成功保存的文章，只为缺失链接启动隔离浏览器重试。补抓完成后，再运行 EPUB 和 PDF 生成命令覆盖原成品。
+断点模式会复用 `manifest.json` 中已经成功保存的文章，只为缺失链接启动隔离浏览器重试。补抓完成后，再运行 EPUB、PDF 和 TXT 生成命令覆盖原成品。
 
 使用最近一次抓取结果生成 EPUB：
 
@@ -100,11 +102,18 @@ pnpm run build:epub
 pnpm run build:pdf
 ```
 
+使用最近一次抓取结果生成 TXT：
+
+```powershell
+pnpm run build:txt
+```
+
 也可以明确指定某一期的临时目录：
 
 ```powershell
 pnpm run build:epub -- ".\tmp\财新周刊-2026年10期"
 pnpm run build:pdf -- ".\tmp\财新周刊-2026年10期"
+pnpm run build:txt -- ".\tmp\财新周刊-2026年10期"
 ```
 
 这样可以在不重新访问财新网站的情况下，反复调整并重新生成阅读文件。
@@ -140,6 +149,12 @@ PDF 使用 A4 版式，包含：
 
 PDF 由无界面的 Chrome 排版生成，中文字体使用系统字体，无需额外安装转换软件。
 
+### TXT
+
+TXT 使用 UTF-8 编码，每一期生成一个纯文本文件。文件按期刊原顺序排列文章，并保留标题、栏目、作者和日期；图片、网页样式、脚本和链接地址不会写入语料。文章之间使用稳定的编号分隔，便于后续合并、切分、分词或转换为 nanoGPT 等训练流程需要的输入格式。
+
+TXT 适合作为个人研究语料的基础版本，但在用于模型训练前仍建议根据目标任务完成去重、训练集与验证集划分、版权和隐私检查。不要把生成的全文语料公开发布或分享给无权访问的人。
+
 ## 常用配置
 
 主要配置位于 `config.json`，可以从 `config.example.json` 重新复制一份。也可以通过 `CAIXIN_CONFIG` 环境变量使用另一份配置文件。
@@ -155,7 +170,9 @@ PDF 由无界面的 Chrome 排版生成，中文字体使用系统字体，无�
 - `minBodyTextLength`：认为正文已经基本加载完成的长度。
 - `headless`：抓取时是否隐藏浏览器窗口；调试建议设为 `false`。
 - `noProxy` / `proxyServer`：直连或指定代理。
+- `epubOutputDir`：EPUB 输出目录。
 - `pdfOutputDir`：PDF 输出目录。
+- `txtOutputDir`：TXT 输出目录。
 - `pdf`：PDF 纸张大小和页边距。
 - `imageDownloadTimeoutMs`：单张图片下载超时。
 - `imageDownloadConcurrency`：生成 PDF 时并行下载图片的数量。
@@ -170,7 +187,7 @@ PDF 由无界面的 Chrome 排版生成，中文字体使用系统字体，无�
 2. 执行 `fetch`，观察识别出的文章数量和栏目。
 3. 随机打开 `tmp/<期号>/` 中的几篇 HTML，检查正文是否完整。
 4. 查看 `manifest.json`，确认没有广告页或栏目页。
-5. 再生成 EPUB 和 PDF。
+5. 再生成 EPUB、PDF 和 TXT。
 
 ## 常见问题
 

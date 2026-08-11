@@ -594,8 +594,10 @@ async function main() {
     throw new Error(`No article items found in ${manifestPath}`);
   }
 
-  ensureDir(path.resolve(config.outputDir));
-  const outputFile = path.join(path.resolve(config.outputDir), `${manifest.title}.epub`);
+  const baseOutputDir = path.resolve(config.outputDir || './output');
+  const outputDir = path.resolve(config.epubOutputDir || path.join(baseOutputDir, 'epub'));
+  ensureDir(outputDir);
+  const outputFile = path.join(outputDir, `${manifest.title}.epub`);
   await buildEpub(issueDir, manifest, outputFile, config);
 
   console.log(`Built EPUB: ${outputFile}`);

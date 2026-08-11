@@ -22,4 +22,12 @@ const pdfResult = spawnSync(process.execPath, ['src/build_pdf.js'], {
   stdio: 'inherit'
 });
 
-process.exit(pdfResult.status || 0);
+if (pdfResult.status !== 0) {
+  process.exit(pdfResult.status || 1);
+}
+
+const txtResult = spawnSync(process.execPath, ['src/build_txt.js'], {
+  stdio: 'inherit'
+});
+
+process.exit(txtResult.status || 0);
