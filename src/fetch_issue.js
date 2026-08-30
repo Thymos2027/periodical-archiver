@@ -244,7 +244,7 @@ function looksLikeArticlePage(url, config) {
 
 function hasBlockedTitle(title, config) {
   const blocked = Array.isArray(config.skipTitleKeywords) ? config.skipTitleKeywords : [
-    '上一期', '下一期', '往期回顾', '周刊导播', '订阅', '广告'
+    '上一期', '下一期', '往期回顾', '周刊导播', '融媒精选', '订阅', '广告'
   ];
 
   return blocked.some((keyword) => String(title || '').includes(keyword));
@@ -567,7 +567,8 @@ function parseArticleSnapshot(html, config, articleUrl, includeCoverContext, fal
     author: authorEl ? authorEl.text().trim() : '',
     pubDate: dateEl ? dateEl.text().trim() : '',
     contentHtml: contentEl.html() || '',
-    bodyTextLength: extractBodyTextLength(contentEl)
+    bodyTextLength: extractBodyTextLength(contentEl),
+    contentImageCount: contentEl.find('img[src]').length
   };
 }
 
@@ -579,6 +580,7 @@ async function waitForBestSnapshot(page, config, articleUrl, includeCoverContext
 
   let bestSnapshot = null;
   let bestLength = 0;
+  let bestImageCount = 0;
   let stableRounds = 0;
   let totalClicks = 0;
 
@@ -594,8 +596,14 @@ async function waitForBestSnapshot(page, config, articleUrl, includeCoverContext
       continue;
     }
 
-    if (snapshot.bodyTextLength > bestLength) {
+    const snapshotImageCount = Number(snapshot.contentImageCount || 0);
+    const hasContent = snapshot.bodyTextLength > 0 || snapshotImageCount > 0;
+    const isBetter = snapshot.bodyTextLength > bestLength
+      || (snapshot.bodyTextLength === bestLength && snapshotImageCount > bestImageCount);
+
+    if (hasContent && (!bestSnapshot || isBetter)) {
       bestLength = snapshot.bodyTextLength;
+      bestImageCount = snapshotImageCount;
       bestSnapshot = snapshot;
       stableRounds = 0;
     } else {
@@ -613,6 +621,10 @@ async function waitForBestSnapshot(page, config, articleUrl, includeCoverContext
     }
 
     if (!readMoreVisible && stableRounds >= 2 && bestLength >= minAcceptLength) {
+      return { snapshot: bestSnapshot, totalClicks };
+    }
+
+    if (!readMoreVisible && stableRounds >= 1 && bestImageCount > 0) {
       return { snapshot: bestSnapshot, totalClicks };
     }
   }
@@ -885,10 +897,18 @@ async function main() {
   await context.close();
 }
 
-main().catch((error) => {
-  console.error(error.message || error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error.message || error);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  buildArticleHtml,
+  hasBlockedTitle,
+  parseArticleSnapshot
+};
 
 
 

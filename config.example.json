@@ -56,7 +56,7 @@
     "articleTitle": "h1",
     "articleAuthor": ".author, .article-author, [class*='author']",
     "articleDate": ".time, .date, .pubtime, time",
-    "articleContent": ".article-content, .content, .article, article, [class*='content']"
+    "articleContent": ".article-content, .content, #Main_Content_Val, .article, article, [class*='content']"
   },
   "removeSelectors": [
     "script",
@@ -83,6 +83,7 @@
     "下一期",
     "往期回顾",
     "周刊导播",
+    "融媒精选",
     "订阅",
     "广告",
     "{{周刊导播"
