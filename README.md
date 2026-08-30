@@ -1,6 +1,6 @@
 # 财新周刊个人归档工具
 
-这是一个面向个人离线阅读和个人文本研究的 Windows 工作流。它复用你自己已经登录的财新账号，抓取当前账号有权阅读的某一期周刊文章，然后生成 EPUB、PDF 和 UTF-8 TXT 三个版本。
+这是一个面向个人离线阅读和个人文本研究的 Windows 工作流。它复用你自己已经登录的财新账号，抓取当前账号有权阅读的某一期周刊文章，然后生成 EPUB、PDF、UTF-8 TXT 和约 200 字的整期摘要。
 
 项目不会破解验证码、绕过付费权限、逆向私有接口或共享账号。登录信息只保存在本机的专用 Chrome 用户目录中。
 
@@ -18,6 +18,7 @@
 - EPUB：`output/epub/<期号>.epub`
 - PDF：`output/pdf/<期号>.pdf`
 - TXT：`output/txt/<期号>.txt`
+- 摘要：`output/summary/<期号>.txt`
 
 ## 环境准备
 
@@ -25,6 +26,7 @@
 - Node.js 20 或更高版本
 - pnpm 10.14.0（可通过 Node.js 自带的 Corepack 启用）
 - Google Chrome；无法启动时可按配置回退到 Edge 或 Playwright Chromium
+- 已安装并登录 Codex CLI（用于生成整期摘要）
 
 启用项目声明的 pnpm 版本：
 
@@ -73,6 +75,7 @@ pnpm run archive -- "https://weekly.caixin.com/..."
 3. 生成 EPUB。
 4. 生成 PDF。
 5. 生成 TXT。
+6. 分析该期 TXT，并生成约 200 字的中文摘要。
 
 任何一步失败都会停止，不会把不完整的后续文件误报为成功。
 
@@ -108,6 +111,18 @@ pnpm run build:pdf
 
 ```powershell
 pnpm run build:txt
+```
+
+使用最近生成的 TXT 生成整期摘要：
+
+```powershell
+pnpm run build:summary
+```
+
+为 `output/txt/` 中已有的全部期刊生成摘要：
+
+```powershell
+pnpm run build:summary:all
 ```
 
 也可以明确指定某一期的临时目录：
@@ -157,6 +172,12 @@ TXT 使用 UTF-8 编码，每一期生成一个纯文本文件。文件按期刊
 
 TXT 适合作为个人研究语料的基础版本，但在用于模型训练前仍建议根据目标任务完成去重、训练集与验证集划分、版权和隐私检查。不要把生成的全文语料公开发布或分享给无权访问的人。
 
+### 整期摘要
+
+摘要步骤读取该期 TXT，从每篇文章提取标题、栏目和代表性正文，再由已登录的 Codex CLI 归纳为约 200 字的一段式中文概述，保存到 `output/summary/`。摘要会尽量覆盖该期最重要的三至五条主线，而不是逐篇罗列标题。
+
+默认使用 Codex 当前配置的模型，不需要把 API 密钥写入项目。可以通过 `summaryTargetChars` 调整目标字数，通过 `summaryArticleExcerptChars` 调整每篇文章用于分析的正文长度；如需固定模型，可在本机 `config.json` 中增加 `summaryModel`。AI 摘要可能出现遗漏，重要事实仍应回看原文核对。
+
 ## 常用配置
 
 主要配置位于 `config.json`，可以从 `config.example.json` 重新复制一份。也可以通过 `CAIXIN_CONFIG` 环境变量使用另一份配置文件。
@@ -176,6 +197,10 @@ TXT 适合作为个人研究语料的基础版本，但在用于模型训练前�
 - `epubOutputDir`：EPUB 输出目录。
 - `pdfOutputDir`：PDF 输出目录。
 - `txtOutputDir`：TXT 输出目录。
+- `summaryOutputDir`：整期摘要输出目录。
+- `summaryTargetChars`：摘要目标字数，默认约 200 字。
+- `summaryArticleExcerptChars`：每篇文章用于摘要分析的正文节选长度。
+- `summaryReasoningEffort`：Codex 生成摘要时的推理强度。
 - `pdf`：PDF 纸张大小和页边距。
 - `imageDownloadTimeoutMs`：单张图片下载超时。
 - `imageDownloadConcurrency`：生成 PDF 时并行下载图片的数量。

@@ -3,13 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.14.0",
-  "description": "Personal-use workflow to capture Caixin Weekly issues and build EPUB, PDF, and TXT archives.",
+  "description": "Personal-use workflow to capture Caixin Weekly issues and build EPUB, PDF, TXT, cover, and summary archives.",
   "main": "src/fetch_issue.js",
   "scripts": {
     "fetch": "node src/fetch_issue.js",
     "build:epub": "node src/build_epub.js",
     "build:pdf": "node src/build_pdf.js",
     "build:txt": "node src/build_txt.js",
+    "build:summary": "node src/build_summary.js",
+    "build:summary:all": "node src/build_summary.js --all",
     "archive": "node src/archive.js"
   },
   "engines": {

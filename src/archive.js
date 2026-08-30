@@ -30,4 +30,12 @@ const txtResult = spawnSync(process.execPath, ['src/build_txt.js'], {
   stdio: 'inherit'
 });
 
-process.exit(txtResult.status || 0);
+if (txtResult.status !== 0) {
+  process.exit(txtResult.status || 1);
+}
+
+const summaryResult = spawnSync(process.execPath, ['src/build_summary.js'], {
+  stdio: 'inherit'
+});
+
+process.exit(summaryResult.status || 0);
