@@ -14,6 +14,7 @@
 
 抓取结果保存在 `tmp/<期号>/`，生成文件保存在：
 
+- 封面原图：`output/封面/<期号>.<图片格式>`
 - EPUB：`output/epub/<期号>.epub`
 - PDF：`output/pdf/<期号>.pdf`
 - TXT：`output/txt/<期号>.txt`
@@ -68,9 +69,10 @@ pnpm run archive -- "https://weekly.caixin.com/..."
 参数应当是目标期刊的目录页或专题页 URL。命令会依次：
 
 1. 抓取文章并写入 `tmp/<期号>/`。
-2. 生成 EPUB。
-3. 生成 PDF。
-4. 生成 TXT。
+2. 将期刊封面原图保存到 `output/封面/`。
+3. 生成 EPUB。
+4. 生成 PDF。
+5. 生成 TXT。
 
 任何一步失败都会停止，不会把不完整的后续文件误报为成功。
 
@@ -170,6 +172,7 @@ TXT 适合作为个人研究语料的基础版本，但在用于模型训练前�
 - `minBodyTextLength`：认为正文已经基本加载完成的长度。
 - `headless`：抓取时是否隐藏浏览器窗口；调试建议设为 `false`。
 - `noProxy` / `proxyServer`：直连或指定代理。
+- `coverOutputDir`：封面原图输出目录。
 - `epubOutputDir`：EPUB 输出目录。
 - `pdfOutputDir`：PDF 输出目录。
 - `txtOutputDir`：TXT 输出目录。

@@ -3,7 +3,7 @@ const path = require('path');
 const { chromium } = require('playwright');
 const cheerio = require('cheerio');
 const { removeInjectedAiSummaryInstructions } = require('./content_cleanup');
-const { detectIssueCoverImageUrl } = require('./issue_cover');
+const { detectIssueCoverImageUrl, saveIssueCoverImage } = require('./issue_cover');
 
 function loadConfig() {
   const configPath = path.resolve(process.env.CAIXIN_CONFIG || './config.json');
@@ -754,6 +754,21 @@ async function main() {
   }
   if (detectedCoverImageUrl) {
     console.log(`Detected issue cover: ${detectedCoverImageUrl}`);
+    const coverOutputDir = path.resolve(
+      config.coverOutputDir || path.join(config.outputDir || './output', '封面')
+    );
+    try {
+      const coverPath = await saveIssueCoverImage(
+        context.request,
+        detectedCoverImageUrl,
+        issueTitle,
+        coverOutputDir,
+        config.imageDownloadTimeoutMs
+      );
+      console.log(`Saved issue cover: ${coverPath}`);
+    } catch (error) {
+      console.warn(`Issue cover save failed: ${error.message || error}`);
+    }
   } else {
     console.warn('Issue cover image not found on page.');
   }

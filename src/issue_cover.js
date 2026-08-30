@@ -1,6 +1,43 @@
+const fs = require('fs');
+const path = require('path');
 const cheerio = require('cheerio');
 
 const DEFAULT_COVER_SELECTORS = '.cover img, img[alt*="财新周刊"], [class*="cover"] img';
+
+function sanitizeFileName(name) {
+  return String(name || '财新周刊封面')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function coverExtension(contentType, imageUrl) {
+  const type = String(contentType || '').toLowerCase().split(';')[0].trim();
+  const byMimeType = {
+    'image/jpeg': '.jpg',
+    'image/jpg': '.jpg',
+    'image/png': '.png',
+    'image/gif': '.gif',
+    'image/webp': '.webp',
+    'image/svg+xml': '.svg',
+    'image/bmp': '.bmp',
+    'image/avif': '.avif'
+  };
+  if (byMimeType[type]) {
+    return byMimeType[type];
+  }
+
+  try {
+    const extension = path.extname(new URL(imageUrl).pathname).toLowerCase();
+    if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.avif'].includes(extension)) {
+      return extension;
+    }
+  } catch {
+    // Fall through to the common Caixin cover format.
+  }
+
+  return '.jpg';
+}
 
 function normalizeUrl(href, baseUrl) {
   if (!href) {
@@ -73,7 +110,30 @@ async function resolveIssueCoverImageUrl(manifest, config) {
   }
 }
 
+async function saveIssueCoverImage(requestContext, imageUrl, issueTitle, outputDir, timeoutMs) {
+  if (!imageUrl) {
+    return '';
+  }
+
+  const response = await requestContext.get(imageUrl, {
+    failOnStatusCode: false,
+    timeout: Number(timeoutMs || 20000)
+  });
+  if (!response.ok()) {
+    throw new Error(`HTTP ${response.status()}`);
+  }
+
+  const contentType = response.headers()['content-type'] || '';
+  const extension = coverExtension(contentType, imageUrl);
+  const coverDir = path.resolve(outputDir);
+  const outputPath = path.join(coverDir, `${sanitizeFileName(issueTitle)}${extension}`);
+  fs.mkdirSync(coverDir, { recursive: true });
+  fs.writeFileSync(outputPath, await response.body());
+  return outputPath;
+}
+
 module.exports = {
   detectIssueCoverImageUrl,
-  resolveIssueCoverImageUrl
+  resolveIssueCoverImageUrl,
+  saveIssueCoverImage
 };

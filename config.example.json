@@ -3,6 +3,7 @@
   "profileDir": "./profile",
   "tempDir": "./tmp",
   "outputDir": "./output",
+  "coverOutputDir": "./output/封面",
   "epubOutputDir": "./output/epub",
   "pdfOutputDir": "./output/pdf",
   "txtOutputDir": "./output/txt",
