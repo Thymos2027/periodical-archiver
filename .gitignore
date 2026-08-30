@@ -2,4 +2,5 @@ node_modules/
 output/
 tmp/
 profile/
+config.json
 *.log
