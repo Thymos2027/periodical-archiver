@@ -1,3 +1,4 @@
+const { outputPath, archivePath } = require('./output_layout');
 ﻿const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
@@ -743,7 +744,7 @@ async function main() {
   }
 
   ensureDir(path.resolve(config.profileDir));
-  ensureDir(path.resolve(config.tempDir));
+  ensureDir(path.resolve(config.archiveDir || './archive'));
   ensureDir(path.resolve(config.outputDir));
 
   let context = await launchBrowserContext(config);
@@ -767,13 +768,13 @@ async function main() {
   if (detectedCoverImageUrl) {
     console.log(`Detected issue cover: ${detectedCoverImageUrl}`);
     const coverOutputDir = path.resolve(
-      config.coverOutputDir || path.join(config.outputDir || './output', '封面')
+      outputPath(config, { title: issueTitle, source: 'caixin' }, 'dir')
     );
     try {
       const coverPath = await saveIssueCoverImage(
         context.request,
         detectedCoverImageUrl,
-        issueTitle,
+        '封面',
         coverOutputDir,
         config.imageDownloadTimeoutMs
       );
@@ -784,7 +785,7 @@ async function main() {
   } else {
     console.warn('Issue cover image not found on page.');
   }
-  const issueDir = path.join(path.resolve(config.tempDir), safeSlug(issueTitle));
+  const issueDir = archivePath(config, { title: issueTitle, source: 'caixin' });
   ensureDir(issueDir);
 
   const manifestPath = path.join(issueDir, 'manifest.json');
@@ -805,6 +806,8 @@ async function main() {
 
   const manifest = {
     title: issueTitle,
+    source: 'caixin',
+    publisher: '财新周刊',
     sourceIssueUrl: issueUrl,
     coverImageUrl: detectedCoverImageUrl,
     createdAt: new Date().toISOString(),
@@ -895,6 +898,8 @@ async function main() {
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
   console.log(`Saved issue files to ${issueDir}`);
   await context.close();
+  if (failedIndexes.length) throw new Error(`Incomplete issue: ${failedIndexes.length} articles failed; resume before building.`);
+  if (process.env.ARCHIVE_RESULT_FILE) fs.writeFileSync(process.env.ARCHIVE_RESULT_FILE, JSON.stringify({ issueDir }));
 }
 
 if (require.main === module) {

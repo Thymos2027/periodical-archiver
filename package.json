@@ -6,13 +6,15 @@
   "description": "Personal-use workflow to capture Caixin Weekly issues and build EPUB, PDF, TXT, cover, and summary archives.",
   "main": "src/fetch_issue.js",
   "scripts": {
-    "fetch": "node src/fetch_issue.js",
-    "build:epub": "node src/build_epub.js",
-    "build:pdf": "node src/build_pdf.js",
-    "build:txt": "node src/build_txt.js",
-    "build:summary": "node src/build_summary.js",
-    "build:summary:all": "node src/build_summary.js --all",
-    "archive": "node src/archive.js"
+    "fetch": "node src/cli.js fetch",
+    "fetch:lifeweek": "node src/cli.js fetch --publication lifeweek",
+    "build:epub": "node src/cli.js build:epub",
+    "build:pdf": "node src/cli.js build:pdf",
+    "build:txt": "node src/cli.js build:txt",
+    "build:summary": "node src/cli.js build:summary",
+    "build:summary:all": "node src/cli.js build:summary --all",
+    "archive": "node src/cli.js archive",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=20"

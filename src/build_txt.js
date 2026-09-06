@@ -1,3 +1,4 @@
+const { outputPath, newestIssueDir } = require('./output_layout');
 const fs = require('fs');
 const path = require('path');
 const cheerio = require('cheerio');
@@ -11,28 +12,6 @@ function loadConfig() {
 
   const raw = fs.readFileSync(configPath, 'utf-8').replace(/^\uFEFF/, '');
   return JSON.parse(raw);
-}
-
-function findNewestIssueDir(tempDir) {
-  const fullTempDir = path.resolve(tempDir);
-  if (!fs.existsSync(fullTempDir)) {
-    throw new Error(`Temp directory not found: ${fullTempDir}`);
-  }
-
-  const candidates = fs.readdirSync(fullTempDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => {
-      const fullPath = path.join(fullTempDir, entry.name);
-      return { fullPath, mtimeMs: fs.statSync(fullPath).mtimeMs };
-    })
-    .filter((entry) => fs.existsSync(path.join(entry.fullPath, 'manifest.json')))
-    .sort((left, right) => right.mtimeMs - left.mtimeMs);
-
-  if (!candidates.length) {
-    throw new Error(`No issue directory with manifest.json found under ${fullTempDir}`);
-  }
-
-  return candidates[0].fullPath;
 }
 
 function ensureDir(dirPath) {
@@ -143,7 +122,7 @@ function main() {
   const config = loadConfig();
   const issueDir = process.argv[2]
     ? path.resolve(process.argv[2])
-    : findNewestIssueDir(config.tempDir || './tmp');
+    : newestIssueDir(config);
   const manifestPath = path.join(issueDir, 'manifest.json');
 
   if (!fs.existsSync(manifestPath)) {
@@ -191,8 +170,7 @@ function main() {
     ...sections
   ].join('\n\n').replace(/\n{4,}/g, '\n\n\n') + '\n';
 
-  const baseOutputDir = path.resolve(config.outputDir || './output');
-  const outputDir = path.resolve(config.txtOutputDir || path.join(baseOutputDir, 'txt'));
+  const outputDir = outputPath(config, manifest, 'dir');
   ensureDir(outputDir);
   const outputFile = path.join(outputDir, `${safeFileName(manifest.title)}.txt`);
   fs.writeFileSync(outputFile, outputText, 'utf-8');

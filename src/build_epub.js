@@ -1,3 +1,4 @@
+const { outputPath, newestIssueDir } = require('./output_layout');
 ﻿const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
@@ -13,30 +14,6 @@ function loadConfig() {
 
   const raw = fs.readFileSync(configPath, 'utf-8').replace(/^\uFEFF/, '');
   return JSON.parse(raw);
-}
-
-function findNewestIssueDir(tempDir) {
-  const fullTempDir = path.resolve(tempDir);
-  if (!fs.existsSync(fullTempDir)) {
-    throw new Error(`Temp directory not found: ${fullTempDir}`);
-  }
-
-  const candidates = fs.readdirSync(fullTempDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => {
-      const fullPath = path.join(fullTempDir, entry.name);
-      return {
-        fullPath,
-        mtimeMs: fs.statSync(fullPath).mtimeMs
-      };
-    })
-    .sort((left, right) => right.mtimeMs - left.mtimeMs);
-
-  if (!candidates.length) {
-    throw new Error(`No issue directories found under ${fullTempDir}`);
-  }
-
-  return candidates[0].fullPath;
 }
 
 function ensureDir(dirPath) {
@@ -557,9 +534,9 @@ async function buildEpub(issueDir, manifest, outputFile, config) {
 
   const indexHtml = buildIndexHtml(manifest);
   const metadata = {
-    uid: `caixin-${Date.now()}`,
+    uid: `${manifest.source || 'caixin'}-${Date.now()}`,
     title: manifest.title || 'Caixin Weekly',
-    author: '财新周刊',
+    author: manifest.publisher || '财新周刊',
     date: new Date().toISOString()
   };
 
@@ -583,7 +560,7 @@ async function buildEpub(issueDir, manifest, outputFile, config) {
 
 async function main() {
   const config = loadConfig();
-  const issueDir = process.argv[2] ? path.resolve(process.argv[2]) : findNewestIssueDir(config.tempDir);
+  const issueDir = process.argv[2] ? path.resolve(process.argv[2]) : newestIssueDir(config);
   const manifestPath = path.join(issueDir, 'manifest.json');
   if (!fs.existsSync(manifestPath)) {
     throw new Error(`manifest.json not found in ${issueDir}`);
@@ -594,8 +571,7 @@ async function main() {
     throw new Error(`No article items found in ${manifestPath}`);
   }
 
-  const baseOutputDir = path.resolve(config.outputDir || './output');
-  const outputDir = path.resolve(config.epubOutputDir || path.join(baseOutputDir, 'epub'));
+  const outputDir = outputPath(config, manifest, 'dir');
   ensureDir(outputDir);
   const outputFile = path.join(outputDir, `${manifest.title}.epub`);
   await buildEpub(issueDir, manifest, outputFile, config);

@@ -1,13 +1,7 @@
 {
   "issueUrl": "https://weekly.caixin.com/",
   "profileDir": "./profile",
-  "tempDir": "./tmp",
   "outputDir": "./output",
-  "coverOutputDir": "./output/封面",
-  "epubOutputDir": "./output/epub",
-  "pdfOutputDir": "./output/pdf",
-  "txtOutputDir": "./output/txt",
-  "summaryOutputDir": "./output/summary",
   "summaryTargetChars": 200,
   "summaryArticleExcerptChars": 1200,
   "summaryReasoningEffort": "low",
@@ -114,5 +108,9 @@
     "特别报道",
     "民生",
     "开卷"
-  ]
+  ],
+  "issueLabels": {
+    "财新周刊_2026-03-15": "2026年第09期"
+  },
+  "archiveDir": "./archive"
 }

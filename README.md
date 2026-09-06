@@ -12,13 +12,27 @@
 2. Playwright 复用登录状态，从某一期周刊页面收集并清洗文章。
 3. 根据本地文章归档生成 EPUB、适合打印批注的 PDF，以及便于文本处理的 TXT。
 
-抓取结果保存在 `tmp/<期号>/`，生成文件保存在：
+抓取结果保存在 `archive/<财新或三联>/<年份及期号>/`，成品按 `output/<财新或三联>/<年份及期号>/` 保存。同一期五种文件直接放在一起，摘要使用 `.summary.txt` 后缀与全文 TXT 区分：
 
-- 封面原图：`output/封面/<期号>.<图片格式>`
-- EPUB：`output/epub/<期号>.epub`
-- PDF：`output/pdf/<期号>.pdf`
-- TXT：`output/txt/<期号>.txt`
-- 摘要：`output/summary/<期号>.txt`
+```text
+output/
+  财新/
+    2026年第35期/
+      财新周刊-2026年35期.epub
+      财新周刊-2026年35期.pdf
+      财新周刊-2026年35期.txt
+      财新周刊-2026年35期.summary.txt
+      封面.jpg
+  三联/
+    2026年第35期/
+      三联生活周刊 2026年第35期 在大学 这样成人.epub
+      三联生活周刊 2026年第35期 在大学 这样成人.pdf
+      三联生活周刊 2026年第35期 在大学 这样成人.txt
+      三联生活周刊 2026年第35期 在大学 这样成人.summary.txt
+      封面.jpg
+```
+
+采集、归档及构建命令均使用 `--publication caixin` 或 `--publication lifeweek`；也接受 `财新` / `三联`。构建未指定期目录时只选该期刊最近采集的期；一键归档始终使用本次采集的确切目录。
 
 ## 环境准备
 
@@ -65,13 +79,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\open_chrome_profile.ps1
 推荐直接执行：
 
 ```powershell
-pnpm run archive -- "https://weekly.caixin.com/..."
+pnpm run archive -- --publication caixin "https://weekly.caixin.com/..."
+pnpm run archive -- --publication lifeweek "https://www.lifeweek.com.cn/magazine/5254"
 ```
 
 参数应当是目标期刊的目录页或专题页 URL。命令会依次：
 
-1. 抓取文章并写入 `tmp/<期号>/`。
-2. 将期刊封面原图保存到 `output/封面/`。
+1. 抓取文章并写入 `archive/<财新或三联>/<年份及期号>/`。
+2. 将期刊封面原图保存到 该期成品目录。
 3. 生成 EPUB。
 4. 生成 PDF。
 5. 生成 TXT。
@@ -81,16 +96,28 @@ pnpm run archive -- "https://weekly.caixin.com/..."
 
 ## 分步执行
 
+### 三联生活周刊试用
+
+在同一个 `./profile` Chrome 中登录三联生活周刊会员账号，确认正文可读后关闭该窗口。三联使用独立采集入口，复用现有 PDF / EPUB 排版和输出目录：
+
+```powershell
+pnpm run fetch:lifeweek -- "https://www.lifeweek.com.cn/magazine/5254"
+pnpm run build:epub -- --publication lifeweek "./archive/三联/2026年第35期"
+pnpm run build:pdf -- --publication lifeweek "./archive/三联/2026年第35期"
+```
+
+采集保存目录中的全部文章卡片（包括翻页图集），保留栏目、原文链接、期刊日期、正文 HTML 和封面。`manifest.json` 中记录预期篇数与失败条目；采集有失败时返回非零状态，可以在采集命令末尾加 `--resume` 补抓，再导出。日期是期刊出版日期。音频、视频及评论不包含在阅读版中。PDF 是网站正文重新排版的阅读版，不是纸刊原版扫描。三联已接入 `archive`，可一次生成全部五类文件。
+
 只抓取文章：
 
 ```powershell
-pnpm run fetch -- "https://weekly.caixin.com/..."
+pnpm run fetch -- --publication caixin "https://weekly.caixin.com/..."
 ```
 
 如果某一期抓取过程中有文章因页面加载异常被跳过，可以断点续抓：
 
 ```powershell
-pnpm run fetch -- "https://weekly.caixin.com/..." --resume
+pnpm run fetch -- --publication caixin "https://weekly.caixin.com/..." --resume
 ```
 
 断点模式会复用 `manifest.json` 中已经成功保存的文章，只为缺失链接启动隔离浏览器重试。补抓完成后，再运行 EPUB、PDF 和 TXT 生成命令覆盖原成品。
@@ -98,39 +125,39 @@ pnpm run fetch -- "https://weekly.caixin.com/..." --resume
 使用最近一次抓取结果生成 EPUB：
 
 ```powershell
-pnpm run build:epub
+pnpm run build:epub -- --publication caixin
 ```
 
 使用最近一次抓取结果生成 PDF：
 
 ```powershell
-pnpm run build:pdf
+pnpm run build:pdf -- --publication caixin
 ```
 
 使用最近一次抓取结果生成 TXT：
 
 ```powershell
-pnpm run build:txt
+pnpm run build:txt -- --publication caixin
 ```
 
 使用最近生成的 TXT 生成整期摘要：
 
 ```powershell
-pnpm run build:summary
+pnpm run build:summary -- --publication caixin
 ```
 
-为 `output/txt/` 中已有的全部期刊生成摘要：
+为所选期刊的各期生成摘要（须先生成 TXT）：
 
 ```powershell
-pnpm run build:summary:all
+pnpm run build:summary:all -- --publication caixin
 ```
 
 也可以明确指定某一期的临时目录：
 
 ```powershell
-pnpm run build:epub -- ".\tmp\财新周刊-2026年10期"
-pnpm run build:pdf -- ".\tmp\财新周刊-2026年10期"
-pnpm run build:txt -- ".\tmp\财新周刊-2026年10期"
+pnpm run build:epub -- --publication caixin ".\archive\财新\2026年第10期"
+pnpm run build:pdf -- --publication caixin ".\archive\财新\2026年第10期"
+pnpm run build:txt -- --publication caixin ".\archive\财新\2026年第10期"
 ```
 
 这样可以在不重新访问财新网站的情况下，反复调整并重新生成阅读文件。
@@ -174,7 +201,7 @@ TXT 适合作为个人研究语料的基础版本，但在用于模型训练前�
 
 ### 整期摘要
 
-摘要步骤读取该期 TXT，从每篇文章提取标题、栏目和代表性正文，再由已登录的 Codex CLI 归纳为约 200 字的一段式中文概述，保存到 `output/summary/`。摘要会尽量覆盖该期最重要的三至五条主线，而不是逐篇罗列标题。
+摘要步骤读取该期 TXT，从每篇文章提取标题、栏目和代表性正文，再由已登录的 Codex CLI 归纳为约 200 字的一段式中文概述，保存到 该期成品目录（`.summary.txt`）。摘要会尽量覆盖该期最重要的三至五条主线，而不是逐篇罗列标题。
 
 默认使用 Codex 当前配置的模型，不需要把 API 密钥写入项目。可以通过 `summaryTargetChars` 调整目标字数，通过 `summaryArticleExcerptChars` 调整每篇文章用于分析的正文长度；如需固定模型，可在本机 `config.json` 中增加 `summaryModel`。AI 摘要可能出现遗漏，重要事实仍应回看原文核对。
 
@@ -193,11 +220,6 @@ TXT 适合作为个人研究语料的基础版本，但在用于模型训练前�
 - `minBodyTextLength`：认为正文已经基本加载完成的长度。
 - `headless`：抓取时是否隐藏浏览器窗口；调试建议设为 `false`。
 - `noProxy` / `proxyServer`：直连或指定代理。
-- `coverOutputDir`：封面原图输出目录。
-- `epubOutputDir`：EPUB 输出目录。
-- `pdfOutputDir`：PDF 输出目录。
-- `txtOutputDir`：TXT 输出目录。
-- `summaryOutputDir`：整期摘要输出目录。
 - `summaryTargetChars`：摘要目标字数，默认约 200 字。
 - `summaryArticleExcerptChars`：每篇文章用于摘要分析的正文节选长度。
 - `summaryReasoningEffort`：Codex 生成摘要时的推理强度。
@@ -213,7 +235,7 @@ TXT 适合作为个人研究语料的基础版本，但在用于模型训练前�
 
 1. 确认专用 Chrome 中的登录状态仍有效。
 2. 执行 `fetch`，观察识别出的文章数量和栏目。
-3. 随机打开 `tmp/<期号>/` 中的几篇 HTML，检查正文是否完整。
+3. 随机打开 `archive/<财新或三联>/<年份及期号>/` 中的几篇 HTML，检查正文是否完整。
 4. 查看 `manifest.json`，确认没有广告页或栏目页。
 5. 再生成 EPUB、PDF 和 TXT。
 
@@ -237,8 +259,12 @@ TXT 适合作为个人研究语料的基础版本，但在用于模型训练前�
 
 ### PDF 生成失败
 
-确认 Chrome 或 Edge 已安装。如果只想重新生成 PDF，可以直接指定已经存在的 `tmp/<期号>` 目录，不需要重新抓取。
+确认 Chrome 或 Edge 已安装。如果只想重新生成 PDF，可以直接指定已经存在的 `archive/<财新或三联>/<年份及期号>` 目录，不需要重新抓取。
 
 ## 使用边界
 
 本工具只适合归档自己账号合法可访问的内容，用于个人离线阅读。请遵守财新的服务条款和版权要求，不要公开传播生成文件或用于批量镜像。
+
+旧版五个格式目录配置已由 `outputDir` 统一替代。`issueLabels` 可为历史日期标题指定已核实的年份期号；本地封面已确认 `财新周刊_2026-03-15` 为 `2026年第09期`。
+
+原始文章 HTML 与 `manifest.json` 持久保存在 `archive/财新或三联/YYYY年第NN期/`，由 `archiveDir` 配置。重建与断点续抓读取此目录。`tmp/` 仅保存测试、校验及迁移过程文件，任务结束后可清理，不参与正式重建。`archive/` 与账号资料一样不提交 Git；备份时应保留。
