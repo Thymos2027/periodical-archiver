@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A personal archiving tool for Caixin Weekly (财新周刊) that captures articles from an already logged-in Chrome browser session and builds EPUB files for offline reading. This is a Windows-focused workflow using Playwright for browser automation and Calibre for EPUB generation.
+A Windows personal archiver for Caixin Weekly (财新周刊) and Lifeweek (三联生活周刊). It reuses an already logged-in Chrome profile and generates EPUB, PDF, TXT, cover, and summary output with built-in exporters.
 
 ## Commands
 

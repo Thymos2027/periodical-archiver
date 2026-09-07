@@ -1,9 +1,9 @@
 {
-  "name": "caixin-weekly-personal-archive",
+  "name": "periodical-archiver",
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.14.0",
-  "description": "Personal-use workflow to capture Caixin Weekly issues and build EPUB, PDF, TXT, cover, and summary archives.",
+  "description": "Windows-first personal archiver for Caixin Weekly and Lifeweek with EPUB, PDF, TXT, cover, and summary output.",
   "main": "src/fetch_issue.js",
   "scripts": {
     "fetch": "node src/cli.js fetch",
