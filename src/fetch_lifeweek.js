@@ -25,21 +25,32 @@ async function main() {
     await navigate();
     const issue = await page.evaluate(() => {
       const head = document.querySelector('.head-img');
+      const detail = window.__NUXT__?.data?.[0]?.magazineDetail?.detail;
+      const chapterItems = window.__NUXT__?.data?.[0]?.chapterList?.list
+        ?.flatMap(section => (section.list || []).map(item => ({
+          id: item.id,
+          title: item.title,
+          section: section.lanmu
+        })))
+        .filter(item => item.id && item.title);
       return {
         heading: head.parentElement.parentElement.innerText,
         cover: head.src,
-        items: Array.from(document.querySelectorAll('.column .column-item')).map(el => ({
+        pubTime: detail?.pubTime,
+        issueNumber: detail?.qikan,
+        items: chapterItems?.length ? chapterItems : Array.from(document.querySelectorAll('.column .column-item')).map(el => ({
           title: el.querySelector('.name, .img-title')?.textContent.trim(),
           section: el.closest('.column').querySelector('.column-title')?.textContent.trim()
         })).filter(x => x.title)
       };
     });
-    const date = issue.heading.match(/(\d{4})年(\d{2})月(\d{2})日/);
-    const number = issue.heading.match(/第\s*(\d+)\s*期/);
+    const date = String(issue.pubTime || issue.heading).match(/(\d{4})年(\d{2})月(\d{2})日/);
+    const number = String(issue.issueNumber || '').match(/\d+/)?.[0]
+      || issue.heading.match(/第\s*(\d+)\s*期/)?.[1];
     if (!date || !number || !issue.items.length) throw new Error('Unrecognized issue metadata or empty table of contents.');
     const headingLines = issue.heading.split('\n').map(s => s.trim()).filter(Boolean);
     const subject = headingLines[headingLines.findIndex(s => s.includes('总第')) + 1];
-    const title = cleanName(`三联生活周刊 ${date[1]}年第${number[1]}期 ${subject}`);
+    const title = cleanName(`三联生活周刊 ${date[1]}年第${number}期 ${subject}`);
     const dir = archivePath(config, { title, source: 'lifeweek' });
     fs.mkdirSync(dir, { recursive: true });
     let manifest = { title, source: 'lifeweek', publisher: '三联生活周刊', sourceIssueUrl: issueUrl,
@@ -57,11 +68,19 @@ async function main() {
     for (const [index, item] of issue.items.entries()) {
       if (manifest.items.some(saved => saved.title === item.title)) continue;
       try {
-        if (index) await navigate();
-        const popupPromise = page.waitForEvent('popup', { timeout: 4000 }).catch(() => null);
-        await page.getByText(item.title, { exact: true }).first().click();
-        const popup = await popupPromise;
-        const articlePage = popup || page;
+        let popup = null;
+        let articlePage = page;
+        if (item.id) {
+          await page.goto(new URL(`/article/${item.id}`, issueUrl).href, {
+            waitUntil: 'networkidle', timeout: config.navigationTimeoutMs || 90000
+          });
+        } else {
+          if (index) await navigate();
+          const popupPromise = page.waitForEvent('popup', { timeout: 4000 }).catch(() => null);
+          await page.getByText(item.title, { exact: true }).first().click();
+          popup = await popupPromise;
+          articlePage = popup || page;
+        }
         await articlePage.waitForURL(/\/article\/\d+/, { timeout: 15000 });
         await articlePage.locator('.article-body, .imgList-box').first().waitFor({ timeout: 20000 });
         await articlePage.waitForTimeout(1200);
