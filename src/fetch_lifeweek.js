@@ -104,13 +104,20 @@ async function main() {
             text: frames.map(f => `${f.title}\n${f.desc}`).join('\n'), author: await articlePage.locator('.imgList-box .author').textContent().catch(() => '三联生活周刊') };
         } else article = await articlePage.evaluate(() => {
           const body = document.querySelector('.article-body');
+          const detail = window.__NUXT__?.data?.[0]?.articleDetail;
           return { html: body.innerHTML, text: body.innerText, title: document.querySelector('.header .title')?.textContent.trim(),
             author: document.querySelector('.header .author')?.textContent.replace(/\s+/g, ' ').trim(),
             intro: document.querySelector('.daodu')?.textContent.trim(),
-            restricted: /购买后|订阅后|开通会员.*阅读|购买.*解锁/.test(body.parentElement.innerText) };
+            declaredContentLength: Number(detail?.contentLength) || 0,
+            restrictedPrompt: /购买后|订阅后|开通会员.*阅读|购买.*解锁/.test(body.parentElement.innerText) };
         });
         const $ = cheerio.load(`<div class="content">${article.html}</div>`);
-        if (article.restricted || (!article.text.trim() && !$('.content img').length)) throw new Error('Empty or restricted article; check membership.');
+        const bodyTextLength = article.text.trim().length;
+        const minimumCompleteLength = article.declaredContentLength
+          ? article.declaredContentLength * 0.6
+          : (config.minBodyTextLength || 800);
+        const restricted = article.restrictedPrompt && bodyTextLength < minimumCompleteLength;
+        if (restricted || (!bodyTextLength && !$('.content img').length)) throw new Error('Empty or restricted article; check membership.');
         $('.content script, .content style, .content iframe, .content audio, .content video').remove();
         $('.content *').each((_, el) => {
           for (const attr of Object.keys(el.attribs || {})) if (/^on|^data-v-|^style$/.test(attr)) $(el).removeAttr(attr);
