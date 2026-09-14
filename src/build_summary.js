@@ -82,8 +82,25 @@ function buildPrompt(issue, targetChars) {
   ].join('\n');
 }
 
+function findWindowsCodexDesktopBin(env = process.env) {
+  if (process.platform !== 'win32' || !env.LOCALAPPDATA) return '';
+
+  const binRoot = path.join(env.LOCALAPPDATA, 'OpenAI', 'Codex', 'bin');
+  try {
+    return fs.readdirSync(binRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => path.join(binRoot, entry.name, 'codex.exe'))
+      .filter((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile())
+      .map((candidate) => ({ candidate, mtimeMs: fs.statSync(candidate).mtimeMs }))
+      .sort((left, right) => right.mtimeMs - left.mtimeMs)[0]?.candidate || '';
+  } catch {
+    return '';
+  }
+}
+
 function runCodexSummary(issue, config) {
-  const codexBin = process.env.CAIXIN_CODEX_BIN || config.codexBin || 'codex';
+  const configuredCodexBin = process.env.CAIXIN_CODEX_BIN || config.codexBin;
+  const codexBin = configuredCodexBin || 'codex';
   const targetChars = Number(config.summaryTargetChars || 200);
   const outputPath = path.join(os.tmpdir(), `caixin-summary-${process.pid}-${Date.now()}.txt`);
   const args = [
@@ -103,13 +120,24 @@ function runCodexSummary(issue, config) {
   }
 
   try {
-    const result = spawnSync(codexBin, args, {
+    const spawnOptions = {
       encoding: 'utf-8',
       input: buildPrompt(issue, targetChars),
       maxBuffer: 10 * 1024 * 1024,
       windowsHide: true
-    });
+    };
+    let result = spawnSync(codexBin, args, spawnOptions);
+    if (!configuredCodexBin && result.error?.code === 'ENOENT') {
+      const desktopCodexBin = findWindowsCodexDesktopBin();
+      if (desktopCodexBin) {
+        console.log(`Codex CLI not found in PATH; using desktop app CLI: ${desktopCodexBin}`);
+        result = spawnSync(desktopCodexBin, args, spawnOptions);
+      }
+    }
     if (result.error) {
+      if (result.error.code === 'ENOENT') {
+        throw new Error(`Codex CLI not found: ${codexBin}. Install/login to Codex, or set CAIXIN_CODEX_BIN/codexBin.`);
+      }
       throw result.error;
     }
     if (result.status !== 0) {
@@ -172,5 +200,6 @@ if (require.main === module) {
 module.exports = {
   buildPrompt,
   extractIssueDigest,
+  findWindowsCodexDesktopBin,
   normalizeSummary
 };

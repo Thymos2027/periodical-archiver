@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const path = require('path');
 const { outputPath, publicationOf, issueFolder } = require('../src/output_layout');
 const { parseArgs } = require('../src/cli');
-const { buildPrompt } = require('../src/build_summary');
+const { buildPrompt, findWindowsCodexDesktopBin } = require('../src/build_summary');
 const fs = require('node:fs');
 const os = require('node:os');
 const { archivePath, listIssues } = require('../src/output_layout');
@@ -47,4 +47,18 @@ test('summary uses actual publication', () => {
   const prompt = buildPrompt({ issueTitle: '三联生活周刊 2026年第35期', articleCount: 26, digest: 'test' }, 200);
   assert.match(prompt, /三联生活周刊/);
   assert.doesNotMatch(prompt, /财新周刊/);
+});
+test('summary finds the newest Codex desktop CLI on Windows', t => {
+  if (process.platform !== 'win32') return t.skip('Windows-only Codex desktop layout');
+  const localAppData = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-desktop-test-'));
+  const oldBin = path.join(localAppData, 'OpenAI', 'Codex', 'bin', 'old', 'codex.exe');
+  const newBin = path.join(localAppData, 'OpenAI', 'Codex', 'bin', 'new', 'codex.exe');
+  fs.mkdirSync(path.dirname(oldBin), { recursive: true });
+  fs.mkdirSync(path.dirname(newBin), { recursive: true });
+  fs.writeFileSync(oldBin, 'old');
+  fs.writeFileSync(newBin, 'new');
+  fs.utimesSync(oldBin, new Date(1_000), new Date(1_000));
+  fs.utimesSync(newBin, new Date(2_000), new Date(2_000));
+  t.after(() => fs.rmSync(localAppData, { recursive: true, force: true }));
+  assert.equal(findWindowsCodexDesktopBin({ LOCALAPPDATA: localAppData }), newBin);
 });

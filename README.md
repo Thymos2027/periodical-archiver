@@ -203,7 +203,7 @@ TXT 适合作为个人研究语料的基础版本，但在用于模型训练前�
 
 摘要步骤读取该期 TXT，从每篇文章提取标题、栏目和代表性正文，再由已登录的 Codex CLI 归纳为约 200 字的一段式中文概述，保存到 该期成品目录（`.summary.txt`）。摘要会尽量覆盖该期最重要的三至五条主线，而不是逐篇罗列标题。
 
-默认使用 Codex 当前配置的模型，不需要把 API 密钥写入项目。可以通过 `summaryTargetChars` 调整目标字数，通过 `summaryArticleExcerptChars` 调整每篇文章用于分析的正文长度；如需固定模型，可在本机 `config.json` 中增加 `summaryModel`。AI 摘要可能出现遗漏，重要事实仍应回看原文核对。
+默认使用 Codex 当前配置的模型，不需要把 API 密钥写入项目。Windows 上如果普通终端的 `PATH` 找不到 `codex`，摘要脚本会自动使用 Codex 桌面版当前安装目录中的 CLI；显式设置的 `CAIXIN_CODEX_BIN` 或 `codexBin` 仍有最高优先级。可以通过 `summaryTargetChars` 调整目标字数，通过 `summaryArticleExcerptChars` 调整每篇文章用于分析的正文长度；如需固定模型，可在本机 `config.json` 中增加 `summaryModel`。AI 摘要可能出现遗漏，重要事实仍应回看原文核对。
 
 ## 常用配置
 
