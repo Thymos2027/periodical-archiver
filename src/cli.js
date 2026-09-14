@@ -30,7 +30,7 @@ function main() {
   const action = process.argv[2];
   const options = parseArgs(process.argv.slice(3));
   if (options.help) {
-    console.log('pnpm run archive -- --publication <caixin|lifeweek> <issue-url> [--resume]\npnpm run fetch -- --publication <caixin|lifeweek> <issue-url> [--resume]\npnpm run build:epub|build:pdf|build:txt|build:summary -- --publication <caixin|lifeweek> [issue-directory]\npnpm run build:summary -- --publication <caixin|lifeweek> --all');
+    console.log('pnpm run archive -- --publication <caixin|lifeweek> <issue-url> [--resume]\npnpm run fetch -- --publication <caixin|lifeweek> <issue-url> [--resume]\npnpm run build:epub|build:pdf|build:txt|build:summary -- --publication <caixin|lifeweek> [issue-directory]\npnpm run build:summary -- --publication <caixin|lifeweek> --all\npnpm run publish -- --publication <caixin|lifeweek> [issue-directory]');
     return;
   }
   const config = JSON.parse(fs.readFileSync(process.env.CAIXIN_CONFIG || 'config.json', 'utf8').replace(/^\uFEFF/, ''));
@@ -49,11 +49,27 @@ function main() {
       if (action === 'archive') {
         for (const kind of ['epub', 'pdf', 'txt']) run(`build_${kind}.js`, [issueDir]);
         run('build_summary.js', [outputPath(config, manifest, 'txt')]);
+        if (config.delivery?.enabled) run('publish_issue.js', [issueDir]);
       }
     } finally {
       if (fs.existsSync(receipt)) fs.unlinkSync(receipt);
       fs.rmdirSync(receiptDir);
     }
+    return;
+  }
+  if (action === 'publish') {
+    if (options.resume || options.all) throw new Error('Unsupported option for publish.');
+    let issue;
+    if (options.positional[0]) {
+      const dir = path.resolve(options.positional[0]);
+      const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8').replace(/^\uFEFF/, ''));
+      if (publicationOf(manifest) !== options.publication) throw new Error('Issue directory does not match publication.');
+      issue = { dir, manifest };
+    } else {
+      issue = listIssues(config, options.publication)[0];
+    }
+    if (!issue) throw new Error('No captured issue found for this publication.');
+    run('publish_issue.js', [issue.dir]);
     return;
   }
   const kind = action.replace(/^build:/, '');

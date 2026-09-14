@@ -5,6 +5,17 @@
   "summaryTargetChars": 200,
   "summaryArticleExcerptChars": 1200,
   "summaryReasoningEffort": "low",
+  "delivery": {
+    "enabled": false,
+    "libraryDir": "E:\\Ebooks\\Magazines",
+    "telethonProjectDir": "E:\\path\\to\\telethon",
+    "credentialsEnv": "E:\\path\\to\\telethon\\.env",
+    "telegramConfig": "E:\\path\\to\\telethon\\config.yaml",
+    "zoteroConfig": "E:\\path\\to\\telethon\\config.server.yaml",
+    "telegramTarget": "@your_channel",
+    "zoteroEnabled": true,
+    "telegramEnabled": true
+  },
   "bookTitlePrefix": "财新周刊",
   "headless": false,
   "browserChannel": "chrome",

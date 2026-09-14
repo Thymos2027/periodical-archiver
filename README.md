@@ -6,11 +6,12 @@
 
 ## 工作方式
 
-完整流程分为三步：
+完整流程会完成采集、构建和个人发布：
 
 1. 使用项目专用的 Chrome 配置目录手动登录财新。
 2. Playwright 复用登录状态，从某一期周刊页面收集并清洗文章。
 3. 根据本地文章归档生成 EPUB、适合打印批注的 PDF，以及便于文本处理的 TXT。
+4. 可选地将 PDF 复制到个人杂志库、写入 Zotero，并上传到自己的 Telegram 频道。
 
 抓取结果保存在 `archive/<财新或三联>/<年份及期号>/`，成品按 `output/<财新或三联>/<年份及期号>/` 保存。同一期五种文件直接放在一起，摘要使用 `.summary.txt` 后缀与全文 TXT 区分：
 
@@ -41,6 +42,7 @@ output/
 - pnpm 10.14.0（可通过 Node.js 自带的 Corepack 启用）
 - Google Chrome；无法启动时可按配置回退到 Edge 或 Playwright Chromium
 - 已安装并登录 Codex CLI（用于生成整期摘要）
+- 启用自动发布时，需要安装 `uv`，并配置一个已登录的本机 Telethon 项目及 Zotero Web API 凭据
 
 启用项目声明的 pnpm 版本：
 
@@ -91,8 +93,30 @@ pnpm run archive -- --publication lifeweek "https://www.lifeweek.com.cn/magazine
 4. 生成 PDF。
 5. 生成 TXT。
 6. 分析该期 TXT，并生成约 200 字的中文摘要。
+7. 配置了 `delivery.enabled` 时，复制 PDF 到个人杂志库、创建 Zotero 链接附件，并上传到 Telegram 频道。
 
 任何一步失败都会停止，不会把不完整的后续文件误报为成功。
+
+## 自动发布到 Zotero 与 Telegram
+
+自动发布只处理 PDF。PDF 会按 `<杂志库>/<财新或三联>/<年份>/文件名.pdf` 保存；Zotero 创建“期刊文章”条目及相对链接附件，不上传 PDF 到 Zotero Storage；Telegram 使用本机已有的 Telethon 登录会话向指定频道发送文件。
+
+复制采用临时文件、SHA-256 校验和原子改名。同名同内容文件会跳过，同名不同内容文件不会被覆盖。Zotero 按来源路径复用条目和附件，Telegram 上传前按完整文件名检查频道历史，因此失败后可以安全重试。
+
+在本机不提交的 `config.json` 中启用 `delivery`，路径和字段示例见 `config.example.json`。凭据继续保存在 Telethon 项目的 `.env`，本项目不会读取后写入配置，也不会将 Telegram `.session` 提交到 Git。
+
+完整归档会自动执行发布。如需只重试最近一期的发布：
+
+```powershell
+pnpm run publish -- --publication caixin
+pnpm run publish -- --publication lifeweek
+```
+
+也可以指定已经采集的期目录：
+
+```powershell
+pnpm run publish -- --publication caixin ".\archive\财新\2026年第36期"
+```
 
 ## 分步执行
 
@@ -223,6 +247,7 @@ TXT 适合作为个人研究语料的基础版本，但在用于模型训练前�
 - `summaryTargetChars`：摘要目标字数，默认约 200 字。
 - `summaryArticleExcerptChars`：每篇文章用于摘要分析的正文节选长度。
 - `summaryReasoningEffort`：Codex 生成摘要时的推理强度。
+- `delivery`：个人杂志库、Zotero Web API 与 Telegram 频道的自动发布设置；默认关闭。
 - `pdf`：PDF 纸张大小和页边距。
 - `imageDownloadTimeoutMs`：单张图片下载超时。
 - `imageDownloadConcurrency`：生成 PDF 时并行下载图片的数量。

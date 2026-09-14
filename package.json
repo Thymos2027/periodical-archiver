@@ -13,6 +13,7 @@
     "build:txt": "node src/cli.js build:txt",
     "build:summary": "node src/cli.js build:summary",
     "build:summary:all": "node src/cli.js build:summary --all",
+    "publish": "node src/cli.js publish",
     "archive": "node src/cli.js archive",
     "test": "node --test"
   },
