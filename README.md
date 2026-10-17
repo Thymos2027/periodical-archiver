@@ -118,6 +118,17 @@ pnpm run publish -- --publication lifeweek
 pnpm run publish -- --publication caixin ".\archive\财新\2026年第36期"
 ```
 
+### 其他渠道下载的 PDF 自动入库
+
+`scripts/sync_magazines_zotero.py` 扫描 `delivery.libraryDir` 中 `财新/<年份>/` 和 `三联/<年份>/` 下的 PDF，把 Zotero 缺失的文件补入对应馆藏。它只写 Zotero，不发送 Telegram，也不复制或移动 PDF。请等下载完成后再运行；已有来源 ID 或相同原始文件名的条目会跳过。PDF 使用相对链接附件，因此其他设备需要同步这份杂志库，并在 Zotero 中配置相同的链接附件根目录。
+
+下载完成后，在任意目录运行以下完整命令；也可先预览：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "E:\Coder\vibe\caixin\scripts\import_magazines_to_zotero.ps1" -Preview
+powershell -NoProfile -ExecutionPolicy Bypass -File "E:\Coder\vibe\caixin\scripts\import_magazines_to_zotero.ps1"
+```
+
 ## 分步执行
 
 ### 三联生活周刊试用
