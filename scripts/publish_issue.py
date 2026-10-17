@@ -17,6 +17,7 @@ from telegram_downloader.config import load_config
 from telegram_downloader.zotero import (
     ZoteroApiClient,
     ZoteroJob,
+    ZoteroRetryableError,
     parse_magazine_metadata,
     source_id_for_existing_file,
 )
@@ -76,7 +77,7 @@ def required_env(name: str) -> str:
     return value
 
 
-async def publish_zotero(
+async def publish_zotero_once(
     pdf: Path,
     library_dir: Path,
     category: str,
@@ -107,6 +108,26 @@ async def publish_zotero(
         print(f"Published to Zotero: parent={parent_key}, attachment={attachment_key}")
     finally:
         await api.close()
+
+
+async def publish_zotero(
+    pdf: Path,
+    library_dir: Path,
+    category: str,
+    year: str,
+    config_path: Path,
+) -> None:
+    for attempt in range(3):
+        try:
+            await publish_zotero_once(pdf, library_dir, category, year, config_path)
+            return
+        except ZoteroRetryableError as error:
+            if attempt == 2:
+                raise
+            delay = max(2 ** attempt, error.retry_after or 0)
+            cause = type(error.__cause__).__name__ if error.__cause__ else type(error).__name__
+            print(f"Zotero transient failure ({cause}); retrying in {delay:g}s ({attempt + 1}/2)", file=sys.stderr)
+            await asyncio.sleep(delay)
 
 
 def message_filename(message: object) -> str:
@@ -191,7 +212,8 @@ def main() -> None:
     try:
         asyncio.run(run(parse_args()))
     except Exception as error:
-        print(f"Publish failed: {error}", file=sys.stderr)
+        cause = type(error.__cause__).__name__ if error.__cause__ else type(error).__name__
+        print(f"Publish failed ({cause}): {error}", file=sys.stderr)
         raise SystemExit(1) from error
 
 
