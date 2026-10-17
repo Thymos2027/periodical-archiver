@@ -2,7 +2,11 @@ node_modules/
 output/
 tmp/
 profile/
+profile-caixin-2/
 config.json
+config.caixin-2.json
 *.log
 
 archive/
+__pycache__/
+*.pyc
