@@ -24,8 +24,11 @@ from telegram_downloader.zotero import (
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="发布一期已生成的期刊 PDF")
+    parser = argparse.ArgumentParser(description="发布一期已生成的期刊封面、EPUB、PDF 和摘要")
     parser.add_argument("--pdf", type=Path, required=True)
+    parser.add_argument("--epub", type=Path, required=True)
+    parser.add_argument("--cover", type=Path, required=True)
+    parser.add_argument("--summary", type=Path, required=True)
     parser.add_argument("--library-dir", type=Path, required=True)
     parser.add_argument("--category", choices=("财新", "三联"), required=True)
     parser.add_argument("--year", required=True)
@@ -148,11 +151,44 @@ async def find_existing_message(client: TelegramClient, target: object, filename
     return None
 
 
+def normalized_caption(value: str) -> str:
+    return "".join(str(value or "").split())
+
+
+async def find_complete_telegram_bundle(
+    client: TelegramClient,
+    target: object,
+    epub_name: str,
+    pdf_name: str,
+    summary: str,
+) -> tuple[object, object] | None:
+    epub_message = await find_existing_message(client, target, epub_name)
+    pdf_message = await find_existing_message(client, target, pdf_name)
+    if not epub_message or not pdf_message:
+        return None
+    if not epub_message.grouped_id or epub_message.grouped_id != pdf_message.grouped_id:
+        return None
+    if normalized_caption(pdf_message.message) != normalized_caption(summary):
+        return None
+    return epub_message, pdf_message
+
+
 async def publish_telegram(
+    cover: Path,
+    epub: Path,
     pdf: Path,
+    summary_path: Path,
     target: str,
     config: object,
 ) -> None:
+    for artifact in (cover, epub, pdf, summary_path):
+        if not artifact.is_file():
+            raise FileNotFoundError(f"Telegram 发布文件不存在: {artifact}")
+    summary = summary_path.read_text(encoding="utf-8-sig").strip()
+    if not summary:
+        raise RuntimeError(f"摘要为空: {summary_path}")
+    if len(summary) > 1024:
+        raise RuntimeError(f"摘要超过 Telegram caption 上限（{len(summary)} > 1024）")
     api_id = int(required_env("TELEGRAM_API_ID"))
     api_hash = required_env("TELEGRAM_API_HASH")
     client = TelegramClient(
@@ -166,17 +202,36 @@ async def publish_telegram(
         if not await client.is_user_authorized():
             raise RuntimeError("本机 Telegram 会话尚未登录")
         entity = await client.get_entity(target)
-        existing = await find_existing_message(client, entity, pdf.name)
-        if existing:
-            print(f"Telegram file already exists: {target}, message={existing.id}")
-            return
-        message = await client.send_file(
+        existing = await find_complete_telegram_bundle(
+            client,
             entity,
-            pdf,
-            caption=pdf.stem,
+            epub.name,
+            pdf.name,
+            summary,
+        )
+        if existing:
+            print(
+                f"Telegram bundle already complete: {target}, "
+                f"epub={existing[0].id}, pdf={existing[1].id}"
+            )
+            return
+        cover_message = await client.send_file(
+            entity,
+            cover,
+            force_document=False,
+        )
+        document_messages = await client.send_file(
+            entity,
+            [epub, pdf],
+            caption=["", summary],
             force_document=True,
         )
-        print(f"Uploaded to Telegram: {target}, message={message.id}")
+        if not isinstance(document_messages, list) or len(document_messages) != 2:
+            raise RuntimeError("Telegram 未返回完整的 EPUB/PDF 媒体组")
+        print(
+            f"Uploaded Telegram bundle: {target}, cover={cover_message.id}, "
+            f"epub={document_messages[0].id}, pdf={document_messages[1].id}"
+        )
     finally:
         await client.disconnect()
 
@@ -195,6 +250,9 @@ def require_telegram_proxy(config: object) -> None:
 
 async def run(args: argparse.Namespace) -> None:
     source = args.pdf.resolve()
+    epub = args.epub.resolve()
+    cover = args.cover.resolve()
+    summary = args.summary.resolve()
     library_dir = args.library_dir.resolve()
     load_dotenv(args.credentials_env.resolve(), override=False)
     telegram_config = None
@@ -205,7 +263,14 @@ async def run(args: argparse.Namespace) -> None:
     if not args.skip_zotero:
         await publish_zotero(destination, library_dir, args.category, args.year, args.zotero_config.resolve())
     if not args.skip_telegram:
-        await publish_telegram(destination, args.telegram_target, telegram_config)
+        await publish_telegram(
+            cover,
+            epub,
+            destination,
+            summary,
+            args.telegram_target,
+            telegram_config,
+        )
 
 
 def main() -> None:

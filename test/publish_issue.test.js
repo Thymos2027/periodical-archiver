@@ -25,6 +25,9 @@ test('publisher maps issue PDF to the configured library and integrations', () =
   assert.equal(args[args.indexOf('--year') + 1], '2026');
   assert.equal(args[args.indexOf('--telegram-target') + 1], '@example');
   assert.equal(path.basename(args[args.indexOf('--pdf') + 1]), '财新周刊-2026年36期.pdf');
+  assert.equal(path.basename(args[args.indexOf('--epub') + 1]), '财新周刊-2026年36期.epub');
+  assert.equal(path.basename(args[args.indexOf('--cover') + 1]), '封面.jpg');
+  assert.equal(path.basename(args[args.indexOf('--summary') + 1]), '财新周刊-2026年36期.summary.txt');
   assert.doesNotMatch(args.join(' '), /skip-zotero|skip-telegram/);
 });
 

@@ -19,6 +19,16 @@ function issueYear(manifest) {
   return match[0];
 }
 
+function coverPath(config, manifest) {
+  const outputDir = outputPath(config, manifest, 'dir');
+  if (fs.existsSync(outputDir)) {
+    const cover = fs.readdirSync(outputDir, { withFileTypes: true })
+      .find((entry) => entry.isFile() && /^封面\.(?:jpe?g|png|webp)$/i.test(entry.name));
+    if (cover) return path.join(outputDir, cover.name);
+  }
+  return outputPath(config, manifest, 'cover', '.jpg');
+}
+
 function buildPublishArgs(config, manifest) {
   const delivery = config.delivery || {};
   if (!delivery.enabled) return null;
@@ -27,6 +37,9 @@ function buildPublishArgs(config, manifest) {
   const args = [
     'run', '--project', projectDir, 'python', script,
     '--pdf', outputPath(config, manifest, 'pdf'),
+    '--epub', outputPath(config, manifest, 'epub'),
+    '--cover', coverPath(config, manifest),
+    '--summary', outputPath(config, manifest, 'summary'),
     '--library-dir', requirePath(delivery.libraryDir, 'libraryDir'),
     '--category', publications[publicationOf(manifest)],
     '--year', issueYear(manifest),
@@ -70,4 +83,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { buildPublishArgs, issueYear, publishIssue };
+module.exports = { buildPublishArgs, coverPath, issueYear, publishIssue };

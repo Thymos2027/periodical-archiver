@@ -11,7 +11,7 @@
 1. 使用项目专用的 Chrome 配置目录手动登录财新。
 2. Playwright 复用登录状态，从某一期周刊页面收集并清洗文章。
 3. 根据本地文章归档生成 EPUB、适合打印批注的 PDF，以及便于文本处理的 TXT。
-4. 可选地将 PDF 复制到个人杂志库、写入 Zotero，并上传到自己的 Telegram 频道。
+4. 可选地将 PDF 复制到个人杂志库、写入 Zotero，并将封面、EPUB、PDF 和摘要发布到自己的 Telegram 频道。
 
 抓取结果保存在 `archive/<财新或三联>/<年份及期号>/`，成品按 `output/<财新或三联>/<年份及期号>/` 保存。同一期五种文件直接放在一起，摘要使用 `.summary.txt` 后缀与全文 TXT 区分：
 
@@ -93,15 +93,15 @@ pnpm run archive -- --publication lifeweek "https://www.lifeweek.com.cn/magazine
 4. 生成 PDF。
 5. 生成 TXT。
 6. 分析该期 TXT，并生成约 200 字的中文摘要。
-7. 配置了 `delivery.enabled` 时，复制 PDF 到个人杂志库、创建 Zotero 链接附件，并上传到 Telegram 频道。
+7. 配置了 `delivery.enabled` 时，复制 PDF 到个人杂志库、创建 Zotero 链接附件，并把封面、EPUB、PDF 与摘要发布到 Telegram 频道。
 
 任何一步失败都会停止，不会把不完整的后续文件误报为成功。
 
 ## 自动发布到 Zotero 与 Telegram
 
-自动发布只处理 PDF。PDF 会按 `<杂志库>/<财新或三联>/<年份>/文件名.pdf` 保存；Zotero 创建“期刊文章”条目及相对链接附件，不上传 PDF 到 Zotero Storage；Telegram 使用本机已有的 Telethon 登录会话向指定频道发送文件。
+个人杂志库和 Zotero 只处理 PDF：PDF 会按 `<杂志库>/<财新或三联>/<年份>/文件名.pdf` 保存，Zotero 创建“期刊文章”条目及相对链接附件，不上传 PDF 到 Zotero Storage。Telegram 使用本机已有的 Telethon 登录会话，先单独发送封面照片，再把 EPUB 与 PDF 作为同一媒体组发送，并将整期摘要放在 PDF 的说明文字中。
 
-复制采用临时文件、SHA-256 校验和原子改名。同名同内容文件会跳过，同名不同内容文件不会被覆盖。Zotero 按来源路径复用条目和附件，Telegram 上传前按完整文件名检查频道历史，因此失败后可以安全重试。
+复制采用临时文件、SHA-256 校验和原子改名。同名同内容文件会跳过，同名不同内容文件不会被覆盖。Zotero 按来源路径复用条目和附件；Telegram 只有在 EPUB、PDF、媒体组和摘要说明全部匹配时才判定该期已完整发布，因此失败后可以安全重试。
 
 在本机不提交的 `config.json` 中启用 `delivery`，路径和字段示例见 `config.example.json`。凭据继续保存在 Telethon 项目的 `.env`，本项目不会读取后写入配置，也不会将 Telegram `.session` 提交到 Git。
 
